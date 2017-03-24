@@ -65,7 +65,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	struct dwbuf	 abbrev = { .buf = abbuf, .len = ablen };
 	struct dwcu	*dcu = NULL;
 	struct itype_queue *itypeq;
-	struct itype	*itype;
+	struct itype	*it;
 
 	itypeq = calloc(1, sizeof(*itypeq));
 	if (itypeq == NULL)
@@ -74,8 +74,8 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	tidx = fidx = 0;
 
-	itype = insert_void(++tidx);
-	TAILQ_INSERT_TAIL(itypeq, itype, next);
+	it = insert_void(++tidx);
+	TAILQ_INSERT_TAIL(itypeq, it, it_next);
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
 		struct itype_queue cu_itypeq;
@@ -86,8 +86,8 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		parse_cu(dcu, &cu_itypeq);
 
 		/* Resolve its types. */
-		TAILQ_FOREACH(itype, &cu_itypeq, next)
-			resolve(itype, &cu_itypeq, dcu->dcu_offset);
+		TAILQ_FOREACH(it, &cu_itypeq, it_next)
+			resolve(it, &cu_itypeq, dcu->dcu_offset);
 
 		/* Merge them with the global type list. */
 		merge(itypeq, &cu_itypeq);
@@ -107,42 +107,42 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
  * of elements in ``itypeq''.
  */
 void
-resolve(struct itype *itype, struct itype_queue *itypeq, size_t offset)
+resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 {
-	int		 toresolve = itype->nelems;
+	int		 toresolve = it->it_nelems;
 	struct itype	*tmp;
 
-	if ((itype->flags & IF_UNRESOLVED_MEMBERS) &&
-	    !TAILQ_EMPTY(&itype->members)) {
-		struct imember	*imember;
+	if ((it->it_flags & IF_UNRESOLVED_MEMBERS) &&
+	    !TAILQ_EMPTY(&it->it_members)) {
+		struct imember	*im;
 
-		TAILQ_FOREACH(tmp, itypeq, next) {
-			TAILQ_FOREACH(imember, &itype->members, next) {
-				if (tmp->off == (imember->ref + offset)) {
-					imember->refidx = tmp->idx;
+		TAILQ_FOREACH(tmp, itypeq, it_next) {
+			TAILQ_FOREACH(im, &it->it_members, im_next) {
+				if (tmp->it_off == (im->im_ref + offset)) {
+					im->im_refidx = tmp->it_idx;
 					toresolve--;
 				}
 			}
 		}
 
 		if (toresolve == 0)
-			itype->flags &= ~IF_UNRESOLVED_MEMBERS;
+			it->it_flags &= ~IF_UNRESOLVED_MEMBERS;
 	}
 
-	if (itype->flags & IF_UNRESOLVED) {
-		TAILQ_FOREACH(tmp, itypeq, next) {
-			if (tmp->off == (itype->ref + offset)) {
-				itype->refidx = tmp->idx;
-				itype->flags &= ~IF_UNRESOLVED;
+	if (it->it_flags & IF_UNRESOLVED) {
+		TAILQ_FOREACH(tmp, itypeq, it_next) {
+			if (tmp->it_off == (it->it_ref + offset)) {
+				it->it_refidx = tmp->it_idx;
+				it->it_flags &= ~IF_UNRESOLVED;
 				break;
 			}
 		}
 	}
 
 #if 1
-	if (itype->flags & (IF_UNRESOLVED|IF_UNRESOLVED_MEMBERS)) {
-		printf("0x%zx: %s: unresolved 0x%llx", itype->off, itype->name,
-		    itype->ref);
+	if (it->it_flags & (IF_UNRESOLVED|IF_UNRESOLVED_MEMBERS)) {
+		printf("0x%zx: %s: unresolved 0x%llx", it->it_off, it->it_name,
+		    it->it_ref);
 		if (toresolve)
 			printf(": %d members", toresolve);
 		printf("\n");
@@ -154,18 +154,18 @@ void
 merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 {
 #if 0
-	struct itype *itype, *tmp;
+	struct itype *it, *tmp;
 
-	TAILQ_FOREACH(itype, otherq, next)
+	TAILQ_FOREACH(it, otherq, it_next)
 #endif
-	TAILQ_CONCAT(itypeq, otherq, next);
+	TAILQ_CONCAT(itypeq, otherq, it_next);
 
 }
 
 void
 parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 {
-	struct itype *itype = NULL;
+	struct itype *it = NULL;
 	struct dwdie *die;
 	size_t psz = dcu->dcu_psize;
 
@@ -174,40 +174,40 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 
 		switch (tag) {
 		case DW_TAG_array_type:
-			itype = parse_array(die, dcu->dcu_psize, ++tidx);
+			it = parse_array(die, dcu->dcu_psize, ++tidx);
 			break;
 		case DW_TAG_enumeration_type:
 			++tidx;
 			continue;
 		case DW_TAG_pointer_type:
-			itype = parse_refers(die, psz, ++tidx, CTF_K_POINTER);
+			it = parse_refers(die, psz, ++tidx, CTF_K_POINTER);
 			break;
 		case DW_TAG_structure_type:
-			itype = parse_struct(die, psz, ++tidx, CTF_K_STRUCT);
+			it = parse_struct(die, psz, ++tidx, CTF_K_STRUCT);
 			break;
 		case DW_TAG_typedef:
-			itype = parse_refers(die, psz, ++tidx, CTF_K_TYPEDEF);
+			it = parse_refers(die, psz, ++tidx, CTF_K_TYPEDEF);
 			break;
 		case DW_TAG_union_type:
-			itype = parse_struct(die, psz, ++tidx, CTF_K_UNION);
+			it = parse_struct(die, psz, ++tidx, CTF_K_UNION);
 			break;
 		case DW_TAG_base_type:
-			itype = parse_base(die, psz, ++tidx);
+			it = parse_base(die, psz, ++tidx);
 			break;
 		case DW_TAG_const_type:
-			itype = parse_refers(die, psz, ++tidx, CTF_K_CONST);
+			it = parse_refers(die, psz, ++tidx, CTF_K_CONST);
 			break;
 		case DW_TAG_volatile_type:
-			itype = parse_refers(die, psz, ++tidx, CTF_K_VOLATILE);
+			it = parse_refers(die, psz, ++tidx, CTF_K_VOLATILE);
 			break;
 		case DW_TAG_restrict_type:
-			itype = parse_refers(die, psz, ++tidx, CTF_K_RESTRICT);
+			it = parse_refers(die, psz, ++tidx, CTF_K_RESTRICT);
 			break;
 		case DW_TAG_subprogram:
-			itype = parse_function(die, psz, ++fidx);
+			it = parse_function(die, psz, ++fidx);
 			break;
 		case DW_TAG_subroutine_type:
-			itype = parse_funcptr(die, psz, ++tidx);
+			it = parse_funcptr(die, psz, ++tidx);
 			break;
 		/*
 		 * Children are assumed to be right after their parent in
@@ -215,14 +215,14 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 		 * parsing them.
 		 */
 		 case DW_TAG_member:
-			assert(itype->type == CTF_K_STRUCT ||
-			    itype->type == CTF_K_UNION);
+			assert(it->it_type == CTF_K_STRUCT ||
+			    it->it_type == CTF_K_UNION);
 			continue;
 		 case DW_TAG_subrange_type:
-			assert(itype->type == CTF_K_ARRAY);
+			assert(it->it_type == CTF_K_ARRAY);
 			continue;
 		case DW_TAG_formal_parameter:
-			assert(itype->type == CTF_K_FUNCTION);
+			assert(it->it_type == CTF_K_FUNCTION);
 			continue;
 #if 1
 		case DW_TAG_lexical_block:
@@ -236,35 +236,35 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			continue;
 		}
 
-		TAILQ_INSERT_TAIL(itypeq, itype, next);
+		TAILQ_INSERT_TAIL(itypeq, it, it_next);
 	}
 }
 
 struct itype *
 insert_void(unsigned int i)
 {
-	struct itype *itype;
+	struct itype *it;
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = 0; /* Do not need to be resolved. */
-	itype->off = VOID_OFFSET;
-	itype->idx = i;
-	itype->enc = CTF_INT_SIGNED;
-	itype->type = CTF_K_INTEGER;
-	itype->name = "void";
-	itype->bits = 0;
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = 0; /* Do not need to be resolved. */
+	it->it_off = VOID_OFFSET;
+	it->it_idx = i;
+	it->it_enc = CTF_INT_SIGNED;
+	it->it_type = CTF_K_INTEGER;
+	it->it_name = "void";
+	it->it_bits = 0;
 
-	return itype;
+	return it;
 }
 
 struct itype *
 parse_base(struct dwdie *die, size_t psz, unsigned int i)
 {
-	struct itype *itype;
+	struct itype *it;
 	struct dwaval *dav;
 	uint16_t encoding, enc = 0, bits = 0;
 	int type;
@@ -316,26 +316,26 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 		return (NULL);
 	}
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = 0; /* Do not need to be resolved. */
-	itype->off = die->die_offset;
-	itype->idx = i;
-	itype->enc = encoding;
-	itype->type = type;
-	itype->name = enc2name(enc);
-	itype->bits = bits;
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = 0; /* Do not need to be resolved. */
+	it->it_off = die->die_offset;
+	it->it_idx = i;
+	it->it_enc = encoding;
+	it->it_type = type;
+	it->it_name = enc2name(enc);
+	it->it_bits = bits;
 
-	return itype;
+	return it;
 }
 
 struct itype *
 parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 {
-	struct itype *itype;
+	struct itype *it;
 	struct dwaval *dav;
 	const char *name = "(anon)";
 	uint64_t ref = 0, size = 0;
@@ -357,35 +357,35 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 		}
 	}
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = IF_UNRESOLVED;
-	itype->off = die->die_offset;
-	itype->ref = ref;
-	itype->idx = i;
-	itype->size = size;
-	itype->type = type;
-	itype->name = strdup(name);
-	if (itype->name == NULL)
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = IF_UNRESOLVED;
+	it->it_off = die->die_offset;
+	it->it_ref = ref;
+	it->it_idx = i;
+	it->it_size = size;
+	it->it_type = type;
+	it->it_name = strdup(name);
+	if (it->it_name == NULL)
 		err(1, "strdup");
 
-	if (itype->ref == 0 && itype->size == sizeof(void *)) {
+	if (it->it_ref == 0 && it->it_size == sizeof(void *)) {
 		/* Work around GCC not emiting a type for void */
-		itype->flags &= ~IF_UNRESOLVED;
-		itype->ref = VOID_OFFSET;
-		itype->refidx = VOID_INDEX;
+		it->it_flags &= ~IF_UNRESOLVED;
+		it->it_ref = VOID_OFFSET;
+		it->it_refidx = VOID_INDEX;
 	}
 
-	return itype;
+	return it;
 }
 
 struct itype *
 parse_array(struct dwdie *die, size_t psz, unsigned int i)
 {
-	struct itype *itype;
+	struct itype *it;
 	struct dwaval *dav;
 	const char *name = "(anon)";
 	uint64_t ref = 0;
@@ -404,31 +404,31 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 		}
 	}
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = IF_UNRESOLVED;
-	itype->off = die->die_offset;
-	itype->ref = ref;
-	itype->idx = i;
-	itype->type = CTF_K_ARRAY;
-	itype->name = strdup(name);
-	if (itype->name == NULL)
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = IF_UNRESOLVED;
+	it->it_off = die->die_offset;
+	it->it_ref = ref;
+	it->it_idx = i;
+	it->it_type = CTF_K_ARRAY;
+	it->it_name = strdup(name);
+	if (it->it_name == NULL)
 		err(1, "strdup");
 
-	subparse_subrange(die, psz, itype);
+	subparse_subrange(die, psz, it);
 
-	return itype;
+	return it;
 }
 
 void
-subparse_subrange(struct dwdie *die, size_t psz, struct itype *itype)
+subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 {
 	struct dwaval *dav;
 
-	assert(itype->type == CTF_K_ARRAY);
+	assert(it->it_type == CTF_K_ARRAY);
 
 	if (die->die_dab->dab_children == DW_CHILDREN_no)
 		return;
@@ -459,14 +459,14 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *itype)
 			}
 		}
 
-		itype->nelems = nelems;
+		it->it_nelems = nelems;
 	}
 }
 
 struct itype *
 parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 {
-	struct itype *itype;
+	struct itype *it;
 	struct dwaval *dav;
 	const char *name = "(anon)";
 	uint64_t size = 0;
@@ -485,36 +485,36 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 		}
 	}
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = IF_UNRESOLVED_MEMBERS;
-	itype->off = die->die_offset;
-	itype->ref = 0;
-	itype->idx = i;
-	itype->size = size;
-	itype->type = type;
-	itype->name = strdup(name);
-	if (itype->name == NULL)
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = IF_UNRESOLVED_MEMBERS;
+	it->it_off = die->die_offset;
+	it->it_ref = 0;
+	it->it_idx = i;
+	it->it_size = size;
+	it->it_type = type;
+	it->it_name = strdup(name);
+	if (it->it_name == NULL)
 		err(1, "strdup");
 
-	subparse_member(die, psz, itype);
+	subparse_member(die, psz, it);
 
-	return itype;
+	return it;
 }
 
 void
-subparse_member(struct dwdie *die, size_t psz, struct itype *itype)
+subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 {
-	struct imember *imember;
+	struct imember *im;
 	struct dwaval *dav;
 	const char *name = "unknown";
 	uint64_t loc = 0, ref = 0;
 	uint16_t bits;
 
-	assert(itype->type == CTF_K_STRUCT || itype->type == CTF_K_UNION);
+	assert(it->it_type == CTF_K_STRUCT || it->it_type == CTF_K_UNION);
 
 	if (die->die_dab->dab_children == DW_CHILDREN_no)
 		return;
@@ -550,30 +550,30 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *itype)
 			}
 		}
 
-		imember = calloc(1, sizeof(*imember));
-		if (imember == NULL)
+		im = calloc(1, sizeof(*im));
+		if (im == NULL)
 			err(1, "calloc");
 
-		imember->loc = loc;
-		imember->ref = ref;
-		imember->name = strdup(name);
-		if (imember->name == NULL)
+		im->im_loc = loc;
+		im->im_ref = ref;
+		im->im_name = strdup(name);
+		if (im->im_name == NULL)
 			err(1, "strdup");
 
-		itype->nelems++;
-		TAILQ_INSERT_TAIL(&itype->members, imember, next);
+		it->it_nelems++;
+		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
 	}
 }
 
 
 void
-subparse_arguments(struct dwdie *die, size_t psz, struct itype *itype)
+subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 {
-	struct imember *imember;
+	struct imember *im;
 	struct dwaval *dav;
 	uint64_t ref = 0;
 
-	assert(itype->type == CTF_K_FUNCTION);
+	assert(it->it_type == CTF_K_FUNCTION);
 
 	if (die->die_dab->dab_children == DW_CHILDREN_no)
 		return;
@@ -586,14 +586,14 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *itype)
 		uint64_t tag = die->die_dab->dab_tag;
 
 		if (tag == DW_TAG_unspecified_parameters) {
-			itype->nelems = VARARGS;
+			it->it_nelems = VARARGS;
 			continue;
 		}
 
 		if (tag != DW_TAG_formal_parameter)
 			break;
 
-		itype->flags |= IF_UNRESOLVED_MEMBERS;
+		it->it_flags |= IF_UNRESOLVED_MEMBERS;
 
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
@@ -607,20 +607,20 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *itype)
 			}
 		}
 
-		imember = calloc(1, sizeof(*imember));
-		if (imember == NULL)
+		im = calloc(1, sizeof(*im));
+		if (im == NULL)
 			err(1, "calloc");
 
-		imember->ref = ref;
-		itype->nelems++;
-		TAILQ_INSERT_TAIL(&itype->members, imember, next);
+		im->im_ref = ref;
+		it->it_nelems++;
+		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
 	}
 }
 
 struct itype *
 parse_function(struct dwdie *die, size_t psz, unsigned int i)
 {
-	struct itype *itype;
+	struct itype *it;
 	struct dwaval *dav;
 	const char *name = "unknown";
 	uint64_t ref = 0;
@@ -639,33 +639,33 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 		}
 	}
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = IF_UNRESOLVED|IF_FUNCTION;
-	itype->off = die->die_offset;
-	itype->ref = ref;		/* return type */
-	itype->idx = i;
-	itype->type = CTF_K_FUNCTION;
-	itype->name = strdup(name);
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = IF_UNRESOLVED|IF_FUNCTION;
+	it->it_off = die->die_offset;
+	it->it_ref = ref;		/* return type */
+	it->it_idx = i;
+	it->it_type = CTF_K_FUNCTION;
+	it->it_name = strdup(name);
 
-	subparse_arguments(die, psz, itype);
+	subparse_arguments(die, psz, it);
 
-	if (itype->ref == 0) {
+	if (it->it_ref == 0) {
 		/* Work around GCC not emiting a type for void */
-		itype->flags &= ~IF_UNRESOLVED;
-		itype->ref = VOID_OFFSET;
-		itype->refidx = VOID_INDEX;
+		it->it_flags &= ~IF_UNRESOLVED;
+		it->it_ref = VOID_OFFSET;
+		it->it_refidx = VOID_INDEX;
 	}
-	return itype;
+	return it;
 }
 
 struct itype *
 parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 {
-	struct itype *itype;
+	struct itype *it;
 	struct dwaval *dav;
 	const char *name = "anon";
 	uint64_t ref = 0;
@@ -684,21 +684,21 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 		}
 	}
 
-	itype = calloc(1, sizeof(*itype));
-	if (itype == NULL)
+	it = calloc(1, sizeof(*it));
+	if (it == NULL)
 		err(1, "calloc");
 
-	TAILQ_INIT(&itype->members);
-	itype->flags = IF_UNRESOLVED;
-	itype->off = die->die_offset;
-	itype->ref = ref;
-	itype->idx = i;
-	itype->type = CTF_K_FUNCTION;
-	itype->name = strdup(name);
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = IF_UNRESOLVED;
+	it->it_off = die->die_offset;
+	it->it_ref = ref;
+	it->it_idx = i;
+	it->it_type = CTF_K_FUNCTION;
+	it->it_name = strdup(name);
 
-	subparse_arguments(die, psz, itype);
+	subparse_arguments(die, psz, it);
 
-	return itype;
+	return it;
 }
 uint64_t
 dav2val(struct dwaval *dav, size_t psz)

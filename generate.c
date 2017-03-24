@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/ctf.h>
 
@@ -113,57 +114,56 @@ imcs_add_string(struct imcs *imcs, const char *str)
 }
 
 void
-imcs_add_func(struct imcs *imcs, struct itype *itype)
+imcs_add_func(struct imcs *imcs, struct itype *it)
 {
 	unsigned short		 func, arg;
-	struct imember		*imember;
+	struct imember		*im;
 	int			 kind, root, vlen;
 	int			 i;
 
 	/* Do not dump function pointers. */
-	if (itype->type != CTF_K_FUNCTION || !(itype->flags & IF_FUNCTION))
+	if (it->it_type != CTF_K_FUNCTION || !(it->it_flags & IF_FUNCTION))
 		return;
 
-	kind = itype->type;
+	kind = it->it_type;
 	root = 0;
-	vlen = itype->nelems;
+	vlen = it->it_nelems;
 
 	func = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 	if (dbuf_copy(&imcs->body, &func, sizeof(func)))
 		err(1, "dbuf_copy");
 
-	func = itype->refidx;
+	func = it->it_refidx;
 	if (dbuf_copy(&imcs->body, &func, sizeof(func)))
 		err(1, "dbuf_copy");
 
-	TAILQ_FOREACH(imember, &itype->members, next) {
-		arg = imember->refidx;
+	TAILQ_FOREACH(im, &it->it_members, im_next) {
+		arg = im->im_refidx;
 		if (dbuf_copy(&imcs->body, &arg, sizeof(arg)))
 			err(1, "dbuf_copy");
 	}
 }
 
 void
-imcs_add_type(struct imcs *imcs, struct itype *itype)
+imcs_add_type(struct imcs *imcs, struct itype *it)
 {
 	struct ctf_stype	 cts;
 	struct ctf_array	 cta;
-	struct imember		*imember;
 	unsigned int		 eob;
 	int			 kind, root, vlen;
 
 	/* Only dump function pointers. */
-	if (itype->type == CTF_K_FUNCTION && (itype->flags & IF_FUNCTION))
+	if (it->it_type == CTF_K_FUNCTION && (it->it_flags & IF_FUNCTION))
 		return;
 
-	kind = itype->type;
+	kind = it->it_type;
 	root = 0;
 	vlen = 0;
 
-	cts.cts_name = imcs_add_string(imcs, itype->name);
+	cts.cts_name = imcs_add_string(imcs, it->it_name);
 	cts.cts_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 	cts.cts_size = sizeof(cts);
-	cts.cts_type = itype->refidx;
+	cts.cts_type = it->it_refidx;
 
 	if (dbuf_copy(&imcs->body, &cts, sizeof(cts)))
 		err(1, "dbuf_copy");
@@ -215,7 +215,7 @@ generate(const char *path, const char *label, uint8_t flags)
 	struct imcs		 imcs;
 	int			 error, fd;
 	struct ctf_lblent	 ctl;
-	struct itype		 *itype;
+	struct itype		 *it;
 
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd == -1) {
@@ -253,15 +253,15 @@ generate(const char *path, const char *label, uint8_t flags)
 	 * Insert functions
 	 */
 	cth.cth_funcoff = dbuf_pad(&imcs.body, 2);
-	TAILQ_FOREACH(itype, &itypeq, next)
-		imcs_add_func(&imcs, itype);
+	TAILQ_FOREACH(it, &itypeq, it_next)
+		imcs_add_func(&imcs, it);
 
 	/*
 	 * Insert types
 	 */
 	cth.cth_typeoff = dbuf_pad(&imcs.body, 4);
-	TAILQ_FOREACH(itype, &itypeq, next)
-		imcs_add_type(&imcs, itype);
+	TAILQ_FOREACH(it, &itypeq, it_next)
+		imcs_add_type(&imcs, it);
 
 	/* String table is written from its own buffer. */
 	cth.cth_stroff = imcs.body.coff;

@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "itype.h"
@@ -82,7 +81,7 @@ main(int argc, char *argv[])
 	const char *filename, *label = NULL, *outfile = NULL;
 	uint8_t flags = 0;
 	int ch, error = 0;
-	struct itype *itype;
+	struct itype *it;
 
 	setlocale(LC_ALL, "");
 
@@ -119,18 +118,18 @@ main(int argc, char *argv[])
 	}
 
 	if (flags & DUMP) {
-		TAILQ_FOREACH(itype, &itypeq, next) {
-			if (!(itype->flags & IF_FUNCTION))
+		TAILQ_FOREACH(it, &itypeq, it_next) {
+			if (!(it->it_flags & IF_FUNCTION))
 				continue;
 
-			dump_func(itype);
+			dump_func(it);
 		}
 		printf("\n");
-		TAILQ_FOREACH(itype, &itypeq, next) {
-			if (itype->flags & IF_FUNCTION)
+		TAILQ_FOREACH(it, &itypeq, it_next) {
+			if (it->it_flags & IF_FUNCTION)
 				continue;
 
-			dump_type(itype);
+			dump_type(it);
 		}
 	}
 
@@ -217,7 +216,7 @@ elf_convert(char *p, size_t filesize)
 	if (file_typeq == NULL)
 		return 1;
 
-	TAILQ_CONCAT(&itypeq, file_typeq, next);
+	TAILQ_CONCAT(&itypeq, file_typeq, it_next);
 
 	free(file_typeq);
 
@@ -227,61 +226,60 @@ elf_convert(char *p, size_t filesize)
 
 /* Display parsed types a la ctfdump(1) */
 void
-dump_type(struct itype *itype)
+dump_type(struct itype *it)
 {
-	struct imember *imember;
+	struct imember *im;
 
-	switch (itype->type) {
+	switch (it->it_type) {
 	case CTF_K_FLOAT:
 	case CTF_K_INTEGER:
 		printf("  [%zd] %s %s encoding=%s offset=0 bits=%d\n",
-		    itype->idx,
-		    (itype->type == CTF_K_INTEGER) ? "INTEGER" : "FLOAT",
-		    itype->name, ctf_enc2name(itype->enc), itype->bits);
+		    it->it_idx,
+		    (it->it_type == CTF_K_INTEGER) ? "INTEGER" : "FLOAT",
+		    it->it_name, ctf_enc2name(it->it_enc), it->it_bits);
 		break;
 	case CTF_K_POINTER:
-		printf("  <%zd> POINTER %s refers to %zd\n", itype->idx,
-		    itype->name, itype->refidx);
+		printf("  <%zd> POINTER %s refers to %zd\n", it->it_idx,
+		    it->it_name, it->it_refidx);
 		break;
 	case CTF_K_TYPEDEF:
 		printf("  <%zd> TYPEDEF %s refers to %zd\n",
-		    itype->idx, itype->name, itype->refidx);
+		    it->it_idx, it->it_name, it->it_refidx);
 		break;
 	case CTF_K_VOLATILE:
-		printf("  <%zd> VOLATILE %s refers to %zd\n", itype->idx,
-		    itype->name, itype->refidx);
+		printf("  <%zd> VOLATILE %s refers to %zd\n", it->it_idx,
+		    it->it_name, it->it_refidx);
 		break;
 	case CTF_K_CONST:
-		printf("  <%zd> CONST %s refers to %zd\n", itype->idx,
-		    itype->name, itype->refidx);
+		printf("  <%zd> CONST %s refers to %zd\n", it->it_idx,
+		    it->it_name, it->it_refidx);
 		break;
 	case CTF_K_RESTRICT:
-		printf("  <%zd> RESTRICT %s refers to %zd\n", itype->idx,
-		    itype->name, itype->refidx);
+		printf("  <%zd> RESTRICT %s refers to %zd\n", it->it_idx,
+		    it->it_name, it->it_refidx);
 		break;
 	case CTF_K_ARRAY:
 		printf("  [%zd] ARRAY %s content: %zd index: ?? nelems: %lld\n",
-		    itype->idx, itype->name, itype->refidx, itype->nelems);
+		    it->it_idx, it->it_name, it->it_refidx, it->it_nelems);
 		printf("\n");
 		break;
 	case CTF_K_STRUCT:
 	case CTF_K_UNION:
-		printf("  [%zd] %s %s (%lld bytes)\n", itype->idx,
-		    (itype->type == CTF_K_STRUCT) ? "STRUCT" : "UNION",
-		    itype->name, itype->size);
-		TAILQ_FOREACH(imember, &itype->members, next) {
+		printf("  [%zd] %s %s (%lld bytes)\n", it->it_idx,
+		    (it->it_type == CTF_K_STRUCT) ? "STRUCT" : "UNION",
+		    it->it_name, it->it_size);
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
 			printf("\t%s type=%zd (0x%llx) off=%zd\n",
-			    imember->name, imember->refidx, imember->ref,
-			    imember->loc);
+			    im->im_name, im->im_refidx, im->im_ref, im->im_loc);
 		}
 		printf("\n");
 		break;
 	case CTF_K_FUNCTION:
 		printf("  [%zd] FUNCTION (%s) returns: %zd args: (",
-		    itype->idx, itype->name, itype->refidx);
-		TAILQ_FOREACH(imember, &itype->members, next) {
-			printf("%zd%s", imember->refidx,
-			    TAILQ_NEXT(imember, next) ? ", " : "");
+		    it->it_idx, it->it_name, it->it_refidx);
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
+			printf("%zd%s", im->im_refidx,
+			    TAILQ_NEXT(im, im_next) ? ", " : "");
 		}
 		printf(")\n");
 		break;
@@ -291,15 +289,15 @@ dump_type(struct itype *itype)
 }
 
 void
-dump_func(struct itype *itype)
+dump_func(struct itype *it)
 {
-	struct imember *imember;
+	struct imember *im;
 
 	printf("  [%zd] FUNC (%s) returns: %zd args: (",
-	    itype->idx, itype->name, itype->refidx);
-	TAILQ_FOREACH(imember, &itype->members, next) {
-		printf("%zd%s", imember->refidx,
-		TAILQ_NEXT(imember, next) ? ", " : "");
+	    it->it_idx, it->it_name, it->it_refidx);
+	TAILQ_FOREACH(im, &it->it_members, im_next) {
+		printf("%zd%s", im->im_refidx,
+		    TAILQ_NEXT(im, im_next) ? ", " : "");
 	}
 	printf(")\n");
 }
