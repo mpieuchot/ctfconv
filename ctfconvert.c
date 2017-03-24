@@ -241,29 +241,29 @@ dump_type(struct itype *it)
 	case CTF_K_POINTER:
 		printf("  <%zd> POINTER %s refers to %zd\n", it->it_idx,
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refidx);
+		    it->it_refp->it_idx);
 		break;
 	case CTF_K_TYPEDEF:
 		printf("  <%zd> TYPEDEF %s refers to %zd\n",
-		    it->it_idx, it->it_name, it->it_refidx);
+		    it->it_idx, it->it_name, it->it_refp->it_idx);
 		break;
 	case CTF_K_VOLATILE:
 		printf("  <%zd> VOLATILE %s refers to %zd\n", it->it_idx,
-		    it->it_name, it->it_refidx);
+		    it->it_name, it->it_refp->it_idx);
 		break;
 	case CTF_K_CONST:
 		printf("  <%zd> CONST %s refers to %zd\n", it->it_idx,
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refidx);
+		    it->it_refp->it_idx);
 		break;
 	case CTF_K_RESTRICT:
 		printf("  <%zd> RESTRICT %s refers to %zd\n", it->it_idx,
-		    it->it_name, it->it_refidx);
+		    it->it_name, it->it_refp->it_idx);
 		break;
 	case CTF_K_ARRAY:
 		printf("  [%zd] ARRAY %s content: %zd index: ?? nelems: %lld\n",
 		    it->it_idx, (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refidx, it->it_nelems);
+		    it->it_refp->it_idx, it->it_nelems);
 		printf("\n");
 		break;
 	case CTF_K_STRUCT:
@@ -275,16 +275,16 @@ dump_type(struct itype *it)
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
 			printf("\t%s type=%zd (0x%llx) off=%zd\n",
 			    (im->im_name != NULL) ? im->im_name : "unknown",
-			    im->im_refidx, im->im_ref, im->im_loc);
+			    im->im_refp->it_idx, im->im_ref, im->im_loc);
 		}
 		printf("\n");
 		break;
 	case CTF_K_FUNCTION:
 		printf("  [%zd] FUNCTION (%s) returns: %zd args: (",
 		    it->it_idx, (it->it_name != NULL) ? it->it_name : "anon",
-		    it->it_refidx);
+		    it->it_refp->it_idx);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
-			printf("%zd%s", im->im_refidx,
+			printf("%zd%s", im->im_refp->it_idx,
 			    TAILQ_NEXT(im, im_next) ? ", " : "");
 		}
 		printf(")\n");
@@ -301,9 +301,9 @@ dump_func(struct itype *it)
 
 	printf("  [%zd] FUNC (%s) returns: %zd args: (",
 	    it->it_idx,  (it->it_name != NULL) ? it->it_name : "unknown",
-	    it->it_refidx);
+	    it->it_refp->it_idx);
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
-		printf("%zd%s", im->im_refidx,
+		printf("%zd%s", im->im_refp->it_idx,
 		    TAILQ_NEXT(im, im_next) ? ", " : "");
 	}
 	printf(")\n");

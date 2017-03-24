@@ -36,7 +36,6 @@
 #define DPRINTF(x...)	do { /*printf(x)*/ } while (0)
 
 #define VOID_OFFSET	1	/* Fake offset for generating "void" type. */
-#define	VOID_INDEX	1
 
 void		 parse_cu(struct dwcu *, struct itype_queue *);
 void		 resolve(struct itype *, struct itype_queue *, size_t);
@@ -58,6 +57,7 @@ uint64_t	 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
+struct itype	*void_it;
 unsigned int	 tidx, fidx;	/* type and function indexes */
 
 /*
@@ -74,7 +74,6 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	struct dwbuf	 abbrev = { .buf = abbuf, .len = ablen };
 	struct dwcu	*dcu = NULL;
 	struct itype_queue *itypeq;
-	struct itype	*it;
 
 	itypeq = calloc(1, sizeof(*itypeq));
 	if (itypeq == NULL)
@@ -83,11 +82,12 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	tidx = fidx = 0;
 
-	it = insert_void(++tidx);
-	TAILQ_INSERT_TAIL(itypeq, it, it_next);
+	void_it = insert_void(++tidx);
+	TAILQ_INSERT_TAIL(itypeq, void_it, it_next);
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
-		struct itype_queue cu_itypeq;
+		struct itype_queue	 cu_itypeq;
+		struct itype		*it;
 
 		TAILQ_INIT(&cu_itypeq);
 
@@ -124,7 +124,7 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
 			TAILQ_FOREACH(im, &it->it_members, im_next) {
 				if (tmp->it_off == (im->im_ref + offset)) {
-					im->im_refidx = tmp->it_idx;
+					im->im_refp = tmp;
 					toresolve--;
 				}
 			}
@@ -137,7 +137,7 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 	if (it->it_flags & ITF_UNRESOLVED) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
 			if (tmp->it_off == (it->it_ref + offset)) {
-				it->it_refidx = tmp->it_idx;
+				it->it_refp = tmp;
 				it->it_flags &= ~ITF_UNRESOLVED;
 				break;
 			}
@@ -155,15 +155,125 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 #endif
 }
 
+void
+it_free(struct itype *it)
+{
+	struct imember *im;
+
+	if (it == NULL)
+		return;
+
+	while ((im = TAILQ_FIRST(&it->it_members)) != NULL) {
+		TAILQ_REMOVE(&it->it_members, im, im_next);
+		free(im);
+	}
+
+
+	free(it->it_name);
+	free(it);
+}
+
+/*
+ * Return 1 if ``a'' matches ``b'', 0 otherwise.
+ */
+int
+it_match(struct itype *a, struct itype *b)
+{
+	if ((a->it_type != b->it_type) || (a->it_nelems != b->it_nelems))
+		return 0;
+
+	if ((a->it_name != NULL) && (b->it_name != NULL) &&
+	    (strcmp(a->it_name, b->it_name) == 0))
+		return 1;
+
+	if ((a->it_refp != NULL) && (b->it_refp != NULL))
+		return it_match(a->it_refp, b->it_refp);
+
+	return 0;
+}
+
 /*
  * Merge type representation from a CU with already known types.
+ *
+ * This algorithm is in O(n*(m+n)) with:
+ *   n = number of elements in ``otherq''
+ *   m = number of elements in ``itypeq''
  */
 void
 merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 {
-	/* FIXME */
+	struct itype *it, *nit;
+	struct itype *prev, *last;
+	int duplicate;
+
+
+	/* Remember last of the existing types. */
+	last = TAILQ_LAST(itypeq, itype_queue);
+	if (last == NULL)
+		return;
+
+	/* First ``it'' that needs a duplicate check. */
+	it = TAILQ_FIRST(otherq);
+	if (it == NULL)
+		return;
+
 	TAILQ_CONCAT(itypeq, otherq, it_next);
 
+	for (; it != NULL; it = nit) {
+		nit = TAILQ_NEXT(it, it_next);
+
+		/* We're looking for duplicated type only. */
+		if (it->it_flags & ITF_FUNCTION)
+			continue;
+
+		/* First look if we already have this type. */
+		duplicate = 0;
+		prev = TAILQ_FIRST(itypeq);
+		while (prev != last) {
+			if (it_match(it, prev)) {
+				duplicate = 1;
+				break;
+			}
+			prev = TAILQ_NEXT(prev, it_next);
+		}
+
+		if (duplicate) {
+			struct itype *old = it;
+
+			/* Remove duplicate */
+			TAILQ_REMOVE(itypeq, it, it_next);
+
+			it = TAILQ_NEXT(last, it_next);
+			while (it != NULL) {
+				struct imember *im;
+
+				/* Substitute references */
+				if (it->it_refp == old)
+					it->it_refp = prev;
+
+				TAILQ_FOREACH(im, &it->it_members, im_next) {
+					if (im->im_refp == old)
+						im->im_refp = prev;
+				}
+
+				/* Adjust indexes, assume newidx < oldidx */
+				if (it->it_idx > old->it_idx)
+					it->it_idx--;
+
+				it = TAILQ_NEXT(it, it_next);
+			}
+
+			it_free(old);
+		}
+	}
+
+	/* Update global index to match removed entries. */
+	it = TAILQ_LAST(itypeq, itype_queue);
+	while (it != NULL && (it->it_flags & ITF_FUNCTION))
+		it = TAILQ_PREV(it, itype_queue, it_next);
+
+	if (it != NULL)
+		tidx = it->it_idx;
 }
 
 void
@@ -208,7 +318,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			it = parse_refers(die, psz, ++tidx, CTF_K_RESTRICT);
 			break;
 		case DW_TAG_subprogram:
-			it = parse_function(die, psz, ++fidx);
+			it = parse_function(die, psz, fidx++);
 			break;
 		case DW_TAG_subroutine_type:
 			it = parse_funcptr(die, psz, ++tidx);
@@ -330,7 +440,7 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_idx = i;
 	it->it_enc = encoding;
 	it->it_type = type;
-	it->it_name = enc2name(enc);
+	it->it_name = strdup(enc2name(enc));
 	it->it_bits = bits;
 
 	return it;
@@ -341,7 +451,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = NULL;
+	char *name = NULL;
 	uint64_t ref = 0, size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -380,7 +490,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 		/* Work around GCC not emiting a type for void */
 		it->it_flags &= ~ITF_UNRESOLVED;
 		it->it_ref = VOID_OFFSET;
-		it->it_refidx = VOID_INDEX;
+		it->it_refp = void_it;
 	}
 
 	return it;
@@ -391,7 +501,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = NULL;
+	char *name = NULL;
 	uint64_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -472,7 +582,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = NULL;
+	char *name = NULL;
 	uint64_t size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -626,7 +736,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = NULL;
+	char *name = NULL;
 	uint64_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -663,8 +773,9 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 		/* Work around GCC not emiting a type for void */
 		it->it_flags &= ~ITF_UNRESOLVED;
 		it->it_ref = VOID_OFFSET;
-		it->it_refidx = VOID_INDEX;
+		it->it_refp = void_it;
 	}
+
 	return it;
 }
 
@@ -673,7 +784,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = NULL;
+	char *name = NULL;
 	uint64_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {

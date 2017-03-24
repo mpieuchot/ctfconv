@@ -31,14 +31,14 @@ struct itype {
 #define	ITF_UNRESOLVED		0x01
 #define	ITF_UNRESOLVED_MEMBERS	0x02
 #define	ITF_FUNCTION		0x04
-	const char		*it_name;   /* type name */
+	char			*it_name;   /* type name */
 	uint64_t		 it_size;   /* size for struct or union */
 	uint64_t		 it_ref;    /* CU offset of referenced type */
 	uint64_t		 it_nelems; /* # of members or arguments */
 #define VARARGS	0xefef
 	size_t			 it_off;   /* off. of matching ABBREV section */
 	size_t			 it_idx;   /* generated CTF type ID */
-	size_t			 it_refidx;/* resolved CTF type ID */
+	struct itype		*it_refp;  /* resolved CTF type */
 	int			 it_type;  /* CTF_K_* type */
 	uint16_t		 it_enc;   /* CTF base type encoding */
 	uint16_t		 it_bits;  /* CTF base type bits */
@@ -52,7 +52,7 @@ struct imember {
 	const char		*im_name;   /* struct or union field name */
 	uint64_t		 im_ref;    /* CU offset of the field type */
 	size_t			 im_loc;    /* FIXME: field offset */
-	size_t			 im_refidx; /* resolved CTF type ID */
+	struct itype		*im_refp;   /* resolved CTF type */
 };
 
 TAILQ_HEAD(itype_queue, itype);

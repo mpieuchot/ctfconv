@@ -132,12 +132,12 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 	if (dbuf_copy(&imcs->body, &func, sizeof(func)))
 		err(1, "dbuf_copy");
 
-	func = it->it_refidx;
+	func = it->it_refp->it_idx;
 	if (dbuf_copy(&imcs->body, &func, sizeof(func)))
 		err(1, "dbuf_copy");
 
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
-		arg = im->im_refidx;
+		arg = im->im_refp->it_idx;
 		if (dbuf_copy(&imcs->body, &arg, sizeof(arg)))
 			err(1, "dbuf_copy");
 	}
@@ -158,7 +158,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	cts.cts_name = imcs_add_string(imcs, it->it_name);
 	cts.cts_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 	cts.cts_size = sizeof(cts);
-	cts.cts_type = it->it_refidx;
+	cts.cts_type = (it->it_refp != NULL) ? it->it_refp->it_idx : 0;
 
 	if (dbuf_copy(&imcs->body, &cts, sizeof(cts)))
 		err(1, "dbuf_copy");
