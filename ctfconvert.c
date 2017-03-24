@@ -46,8 +46,9 @@
 #define DUMP		(1 << 0)	/* ctfdump(1) like SUNW_ctf sections */
 
 __dead void	 usage(void);
-int		 convert(const char *, uint8_t);
-int		 elf_convert(char *, size_t, uint8_t);
+int		 convert(const char *);
+int		 generate(const char *, const char *, uint8_t);
+int		 elf_convert(char *, size_t);
 void		 dump_type(struct itype *);
 void		 dump_func(struct itype *);
 
@@ -64,10 +65,13 @@ struct itype_queue *dwarf_parse(const char *, size_t, const char *, size_t);
 
 const char	*ctf_enc2name(unsigned short);
 
+/* list of parsed types and functions */
+struct itype_queue itypeq = TAILQ_HEAD_INITIALIZER(itypeq);
+
 __dead void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-d] [file ...]\n",
+	fprintf(stderr, "usage: %s [-d] -l label [-o outfile] file ...\n",
 	    getprogname());
 	exit(1);
 }
@@ -75,16 +79,27 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	const char *filename;
+	const char *filename, *label = NULL, *outfile = NULL;
 	uint8_t flags = 0;
 	int ch, error = 0;
+	struct itype *itype;
 
 	setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "d")) != -1) {
+	while ((ch = getopt(argc, argv, "dl:o:")) != -1) {
 		switch (ch) {
 		case 'd':
 			flags |= DUMP;
+			break;
+		case 'l':
+			if (label != NULL)
+				usage();
+			label = optarg;
+			break;
+		case 'o':
+			if (outfile != NULL)
+				usage();
+			outfile = optarg;
 			break;
 		default:
 			usage();
@@ -97,14 +112,33 @@ main(int argc, char *argv[])
 	if (argc <= 0)
 		usage();
 
-	while ((filename = *argv++) != NULL)
-		error |= convert(filename, flags);
+	while ((filename = *argv++) != NULL) {
+		error = convert(filename);
+		if (error != 0)
+			return error;
+	}
 
-	return error;
+	if (flags & DUMP) {
+		printf("\n");
+		TAILQ_FOREACH(itype, &itypeq, next)
+			dump_func(itype);
+
+		printf("\n");
+		TAILQ_FOREACH(itype, &itypeq, next)
+			dump_type(itype);
+	}
+
+	if (outfile != NULL) {
+		error = generate(outfile, label, 0);
+		if (error != 0)
+			return error;
+	}
+
+	return 0;
 }
 
 int
-convert(const char *path, uint8_t flags)
+convert(const char *path)
 {
 	struct stat		 st;
 	int			 fd, error = 1;
@@ -112,11 +146,11 @@ convert(const char *path, uint8_t flags)
 
 	fd = open(path, O_RDONLY);
 	if (fd == -1) {
-		warn("open");
+		warn("open %s", path);
 		return 1;
 	}
 	if (fstat(fd, &st) == -1) {
-		warn("fstat");
+		warn("fstat %s", path);
 		return 1;
 	}
 	if ((uintmax_t)st.st_size > SIZE_MAX) {
@@ -129,7 +163,7 @@ convert(const char *path, uint8_t flags)
 		err(1, "mmap");
 
 	if (iself(p, st.st_size))
-		error = elf_convert(p, st.st_size, flags);
+		error = elf_convert(p, st.st_size);
 
 	munmap(p, st.st_size);
 	close(fd);
@@ -141,7 +175,7 @@ const char		*dstrbuf;
 size_t			 dstrlen;
 
 int
-elf_convert(char *p, size_t filesize, uint8_t flags)
+elf_convert(char *p, size_t filesize)
 {
 	Elf_Ehdr		*eh = (Elf_Ehdr *)p;
 	Elf_Shdr		*sh;
@@ -149,6 +183,7 @@ elf_convert(char *p, size_t filesize, uint8_t flags)
 	const char		*infobuf, *abbuf;
 	size_t			 infolen, ablen;
 	size_t			 i, shstabsz;
+	struct itype_queue	*file_typeq;
 
 	/* Find section header string table location and size. */
 	if (elf_getshstab(p, filesize, &shstab, &shstabsz))
@@ -172,28 +207,17 @@ elf_convert(char *p, size_t filesize, uint8_t flags)
 	    &dstrlen) == -1)
 		warnx("%s section not found", DEBUG_STR);
 
-	struct itype_queue *itypeq;
-
-	itypeq = dwarf_parse(infobuf, infolen, abbuf, ablen);
-	if (itypeq == NULL)
+	file_typeq = dwarf_parse(infobuf, infolen, abbuf, ablen);
+	if (file_typeq == NULL)
 		return 1;
 
-	if (flags & DUMP) {
-		struct itype *itype;
+	TAILQ_CONCAT(&itypeq, file_typeq, next);
 
-		printf("\n");
-		TAILQ_FOREACH(itype, itypeq, next)
-			dump_func(itype);
-
-		printf("\n");
-		TAILQ_FOREACH(itype, itypeq, next)
-			dump_type(itype);
-	}
-
-	free(itypeq);
+	free(file_typeq);
 
 	return 0;
 }
+
 
 /* Display parsed types a la ctfdump(1) */
 void
