@@ -119,14 +119,14 @@ main(int argc, char *argv[])
 
 	if (flags & DUMP) {
 		TAILQ_FOREACH(it, &itypeq, it_next) {
-			if (!(it->it_flags & IF_FUNCTION))
+			if (!(it->it_flags & ITF_FUNCTION))
 				continue;
 
 			dump_func(it);
 		}
 		printf("\n");
 		TAILQ_FOREACH(it, &itypeq, it_next) {
-			if (it->it_flags & IF_FUNCTION)
+			if (it->it_flags & ITF_FUNCTION)
 				continue;
 
 			dump_type(it);

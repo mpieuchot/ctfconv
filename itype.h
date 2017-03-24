@@ -19,42 +19,42 @@
 struct imember;
 
 /*
- * Internal C type representation.
+ * Internal type representation.
  *
  * Some bits of DWARF that we want to keep around to resolve types and
  * variables to their intrinsics.
  */
 struct itype {
-	TAILQ_ENTRY(itype)		 it_next;
-	TAILQ_HEAD(, imember)		 it_members;
-	unsigned int			 it_flags;
-#define	IF_UNRESOLVED		0x01
-#define	IF_UNRESOLVED_MEMBERS	0x02
-#define	IF_FUNCTION		0x04
-	const char			*it_name;	/* type name */
-	uint64_t			 it_size;
-	uint64_t			 it_ref;/* offset of referenced type */
-	uint64_t			 it_nelems;
+	TAILQ_ENTRY(itype)	 it_next;
+	TAILQ_HEAD(, imember)	 it_members;
+	unsigned int		 it_flags;
+#define	ITF_UNRESOLVED		0x01
+#define	ITF_UNRESOLVED_MEMBERS	0x02
+#define	ITF_FUNCTION		0x04
+	const char		*it_name;   /* type name */
+	uint64_t		 it_size;   /* size for struct or union */
+	uint64_t		 it_ref;    /* CU offset of referenced type */
+	uint64_t		 it_nelems; /* # of members or arguments */
 #define VARARGS	0xefef
-	size_t				 it_off;/* offset in abbrev section */
-	size_t				 it_idx;/* index in CTF type section */
-	size_t				 it_refidx; /* map index -> CTF index */
-	int				 it_type;	/* CTF type */
-	uint16_t			 it_enc;
-	uint16_t			 it_bits;
+	size_t			 it_off;   /* off. of matching ABBREV section */
+	size_t			 it_idx;   /* generated CTF type ID */
+	size_t			 it_refidx;/* resolved CTF type ID */
+	int			 it_type;  /* CTF_K_* type */
+	uint16_t		 it_enc;   /* CTF base type encoding */
+	uint16_t		 it_bits;  /* CTF base type bits */
 };
 
 /*
  * Member for types with a variable length (struct, array, etc).
  */
 struct imember {
-	TAILQ_ENTRY(imember)		 im_next;
-	const char			*im_name;
-	uint64_t			 im_ref;
-	size_t				 im_loc;
-	size_t				 im_refidx; /* map index -> CTF index */
+	TAILQ_ENTRY(imember)	 im_next;
+	const char		*im_name;   /* struct or union field name */
+	uint64_t		 im_ref;    /* CU offset of the field type */
+	size_t			 im_loc;    /* FIXME: field offset */
+	size_t			 im_refidx; /* resolved CTF type ID */
 };
 
 TAILQ_HEAD(itype_queue, itype);
 
-extern struct itype_queue itypeq;
+extern struct itype_queue itypeq;	/* Global queue of internal types */

@@ -15,6 +15,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/*
+ * DWARF to IT (internal type) representation parser.
+ */
+
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/queue.h>
@@ -26,7 +30,6 @@
 #include <string.h>
 
 #include "dwarf.h"
-
 #include "dw.h"
 #include "itype.h"
 
@@ -57,6 +60,12 @@ const char	*enc2name(unsigned short);
 
 unsigned int	 tidx, fidx;	/* type and function indexes */
 
+/*
+ * Construct a list of internal type and functions based on DWARF
+ * INFO and ABBREV sections.
+ *
+ * Multiple CUs are supported.
+ */
 struct itype_queue *
 dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
     size_t ablen)
@@ -89,7 +98,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		TAILQ_FOREACH(it, &cu_itypeq, it_next)
 			resolve(it, &cu_itypeq, dcu->dcu_offset);
 
-		/* Merge them with the global type list. */
+		/* Merge them with the common type list. */
 		merge(itypeq, &cu_itypeq);
 
 		dw_dcu_free(dcu);
@@ -97,10 +106,6 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	return itypeq;
 }
-
-#if 1
-#include <stdio.h>
-#endif
 
 /*
  * Worst case it's a O(n*n) resolution lookup, with ``n'' being the number
@@ -112,7 +117,7 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 	int		 toresolve = it->it_nelems;
 	struct itype	*tmp;
 
-	if ((it->it_flags & IF_UNRESOLVED_MEMBERS) &&
+	if ((it->it_flags & ITF_UNRESOLVED_MEMBERS) &&
 	    !TAILQ_EMPTY(&it->it_members)) {
 		struct imember	*im;
 
@@ -126,21 +131,21 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 		}
 
 		if (toresolve == 0)
-			it->it_flags &= ~IF_UNRESOLVED_MEMBERS;
+			it->it_flags &= ~ITF_UNRESOLVED_MEMBERS;
 	}
 
-	if (it->it_flags & IF_UNRESOLVED) {
+	if (it->it_flags & ITF_UNRESOLVED) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
 			if (tmp->it_off == (it->it_ref + offset)) {
 				it->it_refidx = tmp->it_idx;
-				it->it_flags &= ~IF_UNRESOLVED;
+				it->it_flags &= ~ITF_UNRESOLVED;
 				break;
 			}
 		}
 	}
 
-#if 1
-	if (it->it_flags & (IF_UNRESOLVED|IF_UNRESOLVED_MEMBERS)) {
+#ifdef DEBUG
+	if (it->it_flags & (ITF_UNRESOLVED|ITF_UNRESOLVED_MEMBERS)) {
 		printf("0x%zx: %s: unresolved 0x%llx", it->it_off, it->it_name,
 		    it->it_ref);
 		if (toresolve)
@@ -150,14 +155,13 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 #endif
 }
 
+/*
+ * Merge type representation from a CU with already known types.
+ */
 void
 merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 {
-#if 0
-	struct itype *it, *tmp;
-
-	TAILQ_FOREACH(it, otherq, it_next)
-#endif
+	/* FIXME */
 	TAILQ_CONCAT(itypeq, otherq, it_next);
 
 }
@@ -308,7 +312,7 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 	case DW_ATE_float:
 	case DW_ATE_complex_float:
 	case DW_ATE_imaginary_float:
-		encoding = 0; /* TODO */
+		encoding = 0; /* FIXME */
 		type = CTF_K_FLOAT;
 		break;
 	default:
@@ -362,7 +366,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 		err(1, "calloc");
 
 	TAILQ_INIT(&it->it_members);
-	it->it_flags = IF_UNRESOLVED;
+	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;
 	it->it_idx = i;
@@ -374,7 +378,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 
 	if (it->it_ref == 0 && it->it_size == sizeof(void *)) {
 		/* Work around GCC not emiting a type for void */
-		it->it_flags &= ~IF_UNRESOLVED;
+		it->it_flags &= ~ITF_UNRESOLVED;
 		it->it_ref = VOID_OFFSET;
 		it->it_refidx = VOID_INDEX;
 	}
@@ -409,7 +413,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 		err(1, "calloc");
 
 	TAILQ_INIT(&it->it_members);
-	it->it_flags = IF_UNRESOLVED;
+	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;
 	it->it_idx = i;
@@ -490,7 +494,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 		err(1, "calloc");
 
 	TAILQ_INIT(&it->it_members);
-	it->it_flags = IF_UNRESOLVED_MEMBERS;
+	it->it_flags = ITF_UNRESOLVED_MEMBERS;
 	it->it_off = die->die_offset;
 	it->it_ref = 0;
 	it->it_idx = i;
@@ -593,7 +597,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 		if (tag != DW_TAG_formal_parameter)
 			break;
 
-		it->it_flags |= IF_UNRESOLVED_MEMBERS;
+		it->it_flags |= ITF_UNRESOLVED_MEMBERS;
 
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
@@ -644,7 +648,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 		err(1, "calloc");
 
 	TAILQ_INIT(&it->it_members);
-	it->it_flags = IF_UNRESOLVED|IF_FUNCTION;
+	it->it_flags = ITF_UNRESOLVED|ITF_FUNCTION;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;		/* return type */
 	it->it_idx = i;
@@ -655,7 +659,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 
 	if (it->it_ref == 0) {
 		/* Work around GCC not emiting a type for void */
-		it->it_flags &= ~IF_UNRESOLVED;
+		it->it_flags &= ~ITF_UNRESOLVED;
 		it->it_ref = VOID_OFFSET;
 		it->it_refidx = VOID_INDEX;
 	}
@@ -689,7 +693,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 		err(1, "calloc");
 
 	TAILQ_INIT(&it->it_members);
-	it->it_flags = IF_UNRESOLVED;
+	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;
 	it->it_idx = i;

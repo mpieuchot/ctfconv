@@ -121,10 +121,6 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 	int			 kind, root, vlen;
 	int			 i;
 
-	/* Do not dump function pointers. */
-	if (it->it_type != CTF_K_FUNCTION || !(it->it_flags & IF_FUNCTION))
-		return;
-
 	kind = it->it_type;
 	root = 0;
 	vlen = it->it_nelems;
@@ -151,10 +147,6 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	struct ctf_array	 cta;
 	unsigned int		 eob;
 	int			 kind, root, vlen;
-
-	/* Only dump function pointers. */
-	if (it->it_type == CTF_K_FUNCTION && (it->it_flags & IF_FUNCTION))
-		return;
 
 	kind = it->it_type;
 	root = 0;
@@ -229,7 +221,7 @@ generate(const char *path, const char *label, uint8_t flags)
 
 	cth.cth_flags = flags;
 
-	/* TODO */
+	/* FIXME */
 	cth.cth_parlabel = 0;
 	cth.cth_parname = 0;
 
@@ -239,29 +231,37 @@ generate(const char *path, const char *label, uint8_t flags)
 	cth.cth_lbloff = 0;
 
 	ctl.ctl_label = imcs_add_string(&imcs, label);
-	ctl.ctl_typeidx = 42; /* XXX */
+	ctl.ctl_typeidx = 42; /* FIXME */
 
 	/* Fill the buffer */
 	error = dbuf_copy(&imcs.body, &ctl, sizeof(ctl));
 	if (error)
 		goto out;
 
-	/* TODO */
+	/* FIXME */
 	cth.cth_objtoff = dbuf_pad(&imcs.body, 2);
 
 	/*
 	 * Insert functions
 	 */
 	cth.cth_funcoff = dbuf_pad(&imcs.body, 2);
-	TAILQ_FOREACH(it, &itypeq, it_next)
+	TAILQ_FOREACH(it, &itypeq, it_next) {
+		if (!(it->it_flags & ITF_FUNCTION))
+			continue;
+
 		imcs_add_func(&imcs, it);
+	}
 
 	/*
 	 * Insert types
 	 */
 	cth.cth_typeoff = dbuf_pad(&imcs.body, 4);
-	TAILQ_FOREACH(it, &itypeq, it_next)
+	TAILQ_FOREACH(it, &itypeq, it_next) {
+		if (it->it_flags & ITF_FUNCTION)
+			continue;
+
 		imcs_add_type(&imcs, it);
+	}
 
 	/* String table is written from its own buffer. */
 	cth.cth_stroff = imcs.body.coff;
