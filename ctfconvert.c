@@ -119,13 +119,19 @@ main(int argc, char *argv[])
 	}
 
 	if (flags & DUMP) {
-		printf("\n");
-		TAILQ_FOREACH(itype, &itypeq, next)
-			dump_func(itype);
+		TAILQ_FOREACH(itype, &itypeq, next) {
+			if (!(itype->flags & IF_FUNCTION))
+				continue;
 
+			dump_func(itype);
+		}
 		printf("\n");
-		TAILQ_FOREACH(itype, &itypeq, next)
+		TAILQ_FOREACH(itype, &itypeq, next) {
+			if (itype->flags & IF_FUNCTION)
+				continue;
+
 			dump_type(itype);
+		}
 	}
 
 	if (outfile != NULL) {
@@ -225,11 +231,6 @@ dump_type(struct itype *itype)
 {
 	struct imember *imember;
 
-#if 1
-	if (!(itype->flags & IF_FUNCTION))
-		printf("0x%zx:", itype->off);
-#endif
-
 	switch (itype->type) {
 	case CTF_K_FLOAT:
 	case CTF_K_INTEGER:
@@ -276,10 +277,6 @@ dump_type(struct itype *itype)
 		printf("\n");
 		break;
 	case CTF_K_FUNCTION:
-		/* Only dump function pointers with types. */
-		if (itype->flags & IF_FUNCTION)
-			break;
-
 		printf("  [%zd] FUNCTION (%s) returns: %zd args: (",
 		    itype->idx, itype->name, itype->refidx);
 		TAILQ_FOREACH(imember, &itype->members, next) {
@@ -297,11 +294,6 @@ void
 dump_func(struct itype *itype)
 {
 	struct imember *imember;
-
-	if (itype->type != CTF_K_FUNCTION || !(itype->flags & IF_FUNCTION))
-		return;
-
-	printf("0x%zx:", itype->off);
 
 	printf("  [%zd] FUNC (%s) returns: %zd args: (",
 	    itype->idx, itype->name, itype->refidx);
