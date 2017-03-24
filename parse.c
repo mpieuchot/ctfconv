@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Martin Pieuchot <mpi@openbsd.org>
+ * Copyright (c) 2016-2017 Martin Pieuchot <mpi@openbsd.org>
  * Copyright (c) 2016 Jasper Lievisse Adriaanse <jasper@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -341,13 +341,15 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = "(anon)";
+	const char *name = NULL;
 	uint64_t ref = 0, size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = dav2str(dav);
+			name = strdup(dav2str(dav));
+			if (name == NULL)
+				err(1, "strdup");
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -372,9 +374,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 	it->it_idx = i;
 	it->it_size = size;
 	it->it_type = type;
-	it->it_name = strdup(name);
-	if (it->it_name == NULL)
-		err(1, "strdup");
+	it->it_name = name;
 
 	if (it->it_ref == 0 && it->it_size == sizeof(void *)) {
 		/* Work around GCC not emiting a type for void */
@@ -391,13 +391,15 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = "(anon)";
+	const char *name = NULL;
 	uint64_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = dav2str(dav);
+			name = strdup(dav2str(dav));
+			if (name == NULL)
+				err(1, "strdup");
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -418,9 +420,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_ref = ref;
 	it->it_idx = i;
 	it->it_type = CTF_K_ARRAY;
-	it->it_name = strdup(name);
-	if (it->it_name == NULL)
-		err(1, "strdup");
+	it->it_name = name;
 
 	subparse_subrange(die, psz, it);
 
@@ -472,7 +472,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = "(anon)";
+	const char *name = NULL;
 	uint64_t size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -481,7 +481,9 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 			size = dav2val(dav, psz);
 			break;
 		case DW_AT_name:
-			name = dav2str(dav);
+			name = strdup(dav2str(dav));
+			if (name == NULL)
+				err(1, "strdup");
 			break;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
@@ -500,9 +502,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 	it->it_idx = i;
 	it->it_size = size;
 	it->it_type = type;
-	it->it_name = strdup(name);
-	if (it->it_name == NULL)
-		err(1, "strdup");
+	it->it_name = name;
 
 	subparse_member(die, psz, it);
 
@@ -514,7 +514,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 {
 	struct imember *im;
 	struct dwaval *dav;
-	const char *name = "unknown";
+	const char *name = NULL;
 	uint64_t loc = 0, ref = 0;
 	uint16_t bits;
 
@@ -536,7 +536,9 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
 			case DW_AT_name:
-				name = dav2str(dav);
+				name = strdup(dav2str(dav));
+				if (name == NULL)
+					err(1, "strdup");
 				break;
 			case DW_AT_type:
 				ref = dav2val(dav, psz);
@@ -560,9 +562,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 
 		im->im_loc = loc;
 		im->im_ref = ref;
-		im->im_name = strdup(name);
-		if (im->im_name == NULL)
-			err(1, "strdup");
+		im->im_name = name;
 
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
@@ -626,13 +626,15 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = "unknown";
+	const char *name = NULL;
 	uint64_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = dav2str(dav);
+			name = strdup(dav2str(dav));
+			if (name == NULL)
+				err(1, "strdup");
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -653,7 +655,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_ref = ref;		/* return type */
 	it->it_idx = i;
 	it->it_type = CTF_K_FUNCTION;
-	it->it_name = strdup(name);
+	it->it_name = name;
 
 	subparse_arguments(die, psz, it);
 
@@ -671,13 +673,15 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	const char *name = "anon";
+	const char *name = NULL;
 	uint64_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = dav2str(dav);
+			name = strdup(dav2str(dav));
+			if (name == NULL)
+				err(1, "strdup");
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -698,7 +702,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_ref = ref;
 	it->it_idx = i;
 	it->it_type = CTF_K_FUNCTION;
-	it->it_name = strdup(name);
+	it->it_name = name;
 
 	subparse_arguments(die, psz, it);
 

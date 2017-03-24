@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Martin Pieuchot
+ * Copyright (c) 2016-2017 Martin Pieuchot
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -240,7 +240,8 @@ dump_type(struct itype *it)
 		break;
 	case CTF_K_POINTER:
 		printf("  <%zd> POINTER %s refers to %zd\n", it->it_idx,
-		    it->it_name, it->it_refidx);
+		    (it->it_name != NULL) ? it->it_name : "(anon)",
+		    it->it_refidx);
 		break;
 	case CTF_K_TYPEDEF:
 		printf("  <%zd> TYPEDEF %s refers to %zd\n",
@@ -252,7 +253,8 @@ dump_type(struct itype *it)
 		break;
 	case CTF_K_CONST:
 		printf("  <%zd> CONST %s refers to %zd\n", it->it_idx,
-		    it->it_name, it->it_refidx);
+		    (it->it_name != NULL) ? it->it_name : "(anon)",
+		    it->it_refidx);
 		break;
 	case CTF_K_RESTRICT:
 		printf("  <%zd> RESTRICT %s refers to %zd\n", it->it_idx,
@@ -260,23 +262,27 @@ dump_type(struct itype *it)
 		break;
 	case CTF_K_ARRAY:
 		printf("  [%zd] ARRAY %s content: %zd index: ?? nelems: %lld\n",
-		    it->it_idx, it->it_name, it->it_refidx, it->it_nelems);
+		    it->it_idx, (it->it_name != NULL) ? it->it_name : "(anon)",
+		    it->it_refidx, it->it_nelems);
 		printf("\n");
 		break;
 	case CTF_K_STRUCT:
 	case CTF_K_UNION:
 		printf("  [%zd] %s %s (%lld bytes)\n", it->it_idx,
 		    (it->it_type == CTF_K_STRUCT) ? "STRUCT" : "UNION",
-		    it->it_name, it->it_size);
+		    (it->it_name != NULL) ? it->it_name : "(anon)",
+		    it->it_size);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
 			printf("\t%s type=%zd (0x%llx) off=%zd\n",
-			    im->im_name, im->im_refidx, im->im_ref, im->im_loc);
+			    (im->im_name != NULL) ? im->im_name : "unknown",
+			    im->im_refidx, im->im_ref, im->im_loc);
 		}
 		printf("\n");
 		break;
 	case CTF_K_FUNCTION:
 		printf("  [%zd] FUNCTION (%s) returns: %zd args: (",
-		    it->it_idx, it->it_name, it->it_refidx);
+		    it->it_idx, (it->it_name != NULL) ? it->it_name : "anon",
+		    it->it_refidx);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
 			printf("%zd%s", im->im_refidx,
 			    TAILQ_NEXT(im, im_next) ? ", " : "");
@@ -294,7 +300,8 @@ dump_func(struct itype *it)
 	struct imember *im;
 
 	printf("  [%zd] FUNC (%s) returns: %zd args: (",
-	    it->it_idx, it->it_name, it->it_refidx);
+	    it->it_idx,  (it->it_name != NULL) ? it->it_name : "unknown",
+	    it->it_refidx);
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
 		printf("%zd%s", im->im_refidx,
 		    TAILQ_NEXT(im, im_next) ? ", " : "");
