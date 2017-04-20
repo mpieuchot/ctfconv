@@ -29,6 +29,7 @@
 
 #include "hash.h"
 #include "itype.h"
+#include "xmalloc.h"
 
 #define ROUNDUP(x, y) ((((x) + (y) - 1) / (y)) * (y))
 
@@ -58,20 +59,15 @@ struct strentry {
 	size_t		 se_off;
 };
 
-int
+void
 dbuf_realloc(struct dbuf *dbuf, size_t len)
 {
 	assert(dbuf != NULL);
 	assert(len != 0);
 
-	dbuf->data = realloc(dbuf->data, dbuf->size + len);
-	if (dbuf->data == NULL)
-		return -1; /* errno set */
-
+	dbuf->data = xrealloc(dbuf->data, dbuf->size + len);
 	dbuf->size += len;
 	dbuf->cptr = dbuf->data + dbuf->coff;
-
-	return 0;
 }
 
 int
@@ -88,11 +84,8 @@ dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 		return 0;
 
 	left = dbuf->size - dbuf->coff;
-	if (left < len) {
-		error = dbuf_realloc(dbuf, ROUNDUP((len - left), DBUF_CHUNKSZ));
-		if (error)
-			return error;
-	}
+	if (left < len)
+		dbuf_realloc(dbuf, ROUNDUP((len - left), DBUF_CHUNKSZ));
 
 	memcpy(dbuf->cptr, data, len);
 	dbuf->cptr += len;
@@ -123,9 +116,7 @@ imcs_add_string(struct imcs *imcs, const char *str)
 
 	se = (struct strentry *)hash_find(imcs->htab, str, &slot);
 	if (se == NULL) {
-		se = malloc(sizeof(*se));
-		if (se == NULL)
-			err(1, "malloc");
+		se = xmalloc(sizeof(*se));
 		hash_insert(imcs->htab, slot, &se->se_key, str);
 		se->se_off = imcs->stab.coff;
 
@@ -241,13 +232,8 @@ imcs_init(struct imcs *imcs)
 
 	memset(imcs, 0, sizeof(*imcs));
 
-	error = dbuf_realloc(&imcs->body, DBUF_CHUNKSZ);
-	if (error)
-		return error;
-
-	error = dbuf_realloc(&imcs->stab, DBUF_CHUNKSZ);
-	if (error)
-		return error;
+	dbuf_realloc(&imcs->body, DBUF_CHUNKSZ);
+	dbuf_realloc(&imcs->stab, DBUF_CHUNKSZ);
 
 	imcs->htab = hash_init(10);
 	if (imcs->htab == NULL)

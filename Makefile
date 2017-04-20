@@ -1,6 +1,6 @@
 
 PROG=		ctfconvert
-SRCS=		ctfconvert.c parse.c elf.c dw.c generate.c hash.c
+SRCS=		ctfconvert.c parse.c elf.c dw.c generate.c hash.c xmalloc.c
 
 CFLAGS+=	-Wall -Wno-unused -Wstrict-prototypes -Wno-unused-parameter
 

@@ -32,6 +32,7 @@
 #include "dwarf.h"
 #include "dw.h"
 #include "itype.h"
+#include "xmalloc.h"
 
 #define DPRINTF(x...)	do { /*printf(x)*/ } while (0)
 
@@ -75,9 +76,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	struct dwcu	*dcu = NULL;
 	struct itype_queue *itypeq;
 
-	itypeq = calloc(1, sizeof(*itypeq));
-	if (itypeq == NULL)
-		err(1, "calloc");
+	itypeq = xcalloc(1, sizeof(*itypeq));
 	TAILQ_INIT(itypeq);
 
 	tidx = fidx = 0;
@@ -359,10 +358,7 @@ insert_void(unsigned int i)
 {
 	struct itype *it;
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = 0; /* Do not need to be resolved. */
 	it->it_off = VOID_OFFSET;
@@ -430,17 +426,14 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 		return (NULL);
 	}
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = 0; /* Do not need to be resolved. */
 	it->it_off = die->die_offset;
 	it->it_idx = i;
 	it->it_enc = encoding;
 	it->it_type = type;
-	it->it_name = strdup(enc2name(enc));
+	it->it_name = xstrdup(enc2name(enc));
 	it->it_bits = bits;
 
 	return it;
@@ -457,9 +450,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = strdup(dav2str(dav));
-			if (name == NULL)
-				err(1, "strdup");
+			name = xstrdup(dav2str(dav));
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -473,10 +464,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 		}
 	}
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
@@ -507,9 +495,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = strdup(dav2str(dav));
-			if (name == NULL)
-				err(1, "strdup");
+			name = xstrdup(dav2str(dav));
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -520,10 +506,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 		}
 	}
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
@@ -591,9 +574,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 			size = dav2val(dav, psz);
 			break;
 		case DW_AT_name:
-			name = strdup(dav2str(dav));
-			if (name == NULL)
-				err(1, "strdup");
+			name = xstrdup(dav2str(dav));
 			break;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
@@ -601,10 +582,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 		}
 	}
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = ITF_UNRESOLVED_MEMBERS;
 	it->it_off = die->die_offset;
@@ -646,9 +624,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
 			case DW_AT_name:
-				name = strdup(dav2str(dav));
-				if (name == NULL)
-					err(1, "strdup");
+				name = xstrdup(dav2str(dav));
 				break;
 			case DW_AT_type:
 				ref = dav2val(dav, psz);
@@ -666,10 +642,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 			}
 		}
 
-		im = calloc(1, sizeof(*im));
-		if (im == NULL)
-			err(1, "calloc");
-
+		im = xcalloc(1, sizeof(*im));
 		im->im_loc = loc;
 		im->im_ref = ref;
 		im->im_name = name;
@@ -721,10 +694,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 			}
 		}
 
-		im = calloc(1, sizeof(*im));
-		if (im == NULL)
-			err(1, "calloc");
-
+		im = xcalloc(1, sizeof(*im));
 		im->im_ref = ref;
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
@@ -742,9 +712,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = strdup(dav2str(dav));
-			if (name == NULL)
-				err(1, "strdup");
+			name = xstrdup(dav2str(dav));
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -755,10 +723,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 		}
 	}
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = ITF_UNRESOLVED|ITF_FUNCTION;
 	it->it_off = die->die_offset;
@@ -790,9 +755,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = strdup(dav2str(dav));
-			if (name == NULL)
-				err(1, "strdup");
+			name = xstrdup(dav2str(dav));
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -803,10 +766,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 		}
 	}
 
-	it = calloc(1, sizeof(*it));
-	if (it == NULL)
-		err(1, "calloc");
-
+	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
