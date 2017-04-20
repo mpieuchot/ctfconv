@@ -146,18 +146,22 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 void
 imcs_add_type(struct imcs *imcs, struct itype *it)
 {
+	struct imember		*im;
 	struct ctf_stype	 cts;
 	struct ctf_array	 cta;
 	unsigned int		 eob;
+	size_t			 size;
 	int			 kind, root, vlen;
 
+	size = sizeof(cts); /* FIXME */
 	kind = it->it_type;
 	root = 0;
-	vlen = 0;
+	/* Function pointers abuse it_nelems for # arguments. */
+	vlen = (kind != CTF_K_FUNCTION) ? it->it_nelems : 0;
 
 	cts.cts_name = imcs_add_string(imcs, it->it_name);
 	cts.cts_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
-	cts.cts_size = sizeof(cts);
+	cts.cts_size = size;
 	cts.cts_type = (it->it_refp != NULL) ? it->it_refp->it_idx : 0;
 
 	if (dbuf_copy(&imcs->body, &cts, sizeof(cts)))
@@ -166,7 +170,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	switch (kind) {
 	case CTF_K_INTEGER:
 	case CTF_K_FLOAT:
-		eob = 0;
+		eob = 0; /* FIXME */
 		if (dbuf_copy(&imcs->body, &eob, sizeof(eob)))
 			err(1, "dbuf_copy");
 		break;
@@ -174,6 +178,37 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 		memset(&cta, 0, sizeof(cta));
 		if (dbuf_copy(&imcs->body, &cta, sizeof(cta)))
 			err(1, "dbuf_copy");
+		break;
+	case CTF_K_STRUCT:
+	case CTF_K_UNION:
+		if (size < CTF_LSTRUCT_THRESH) {
+			struct ctf_member	 ctm;
+
+			memset(&ctm, 0, sizeof(ctm));
+			TAILQ_FOREACH(im, &it->it_members, im_next) {
+				ctm.ctm_name =
+				    imcs_add_string(imcs, im->im_name);
+				ctm.ctm_type = im->im_refp->it_idx;
+				ctm.ctm_offset = im->im_loc;
+
+				if (dbuf_copy(&imcs->body, &ctm, sizeof(ctm)))
+					err(1, "dbuf_copy");
+			}
+		} else {
+			struct ctf_lmember	 ctlm;
+
+			memset(&ctlm, 0, sizeof(ctlm));
+			TAILQ_FOREACH(im, &it->it_members, im_next) {
+				ctlm.ctlm_name =
+				    imcs_add_string(imcs, im->im_name);
+				ctlm.ctlm_type = im->im_refp->it_idx;
+				ctlm.ctlm_offsetlo = im->im_loc; /* FIXME */
+
+				if (dbuf_copy(&imcs->body, &ctlm, sizeof(ctlm)))
+					err(1, "dbuf_copy");
+			}
+		}
+		break;
 	default:
 		break;
 	}
