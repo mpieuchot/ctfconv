@@ -23,9 +23,14 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <unistd.h>
 
+#include "hash.h"
 #include "itype.h"
+
+#define ROUNDUP(x, y) ((((x) + (y) - 1) / (y)) * (y))
 
 /*
  * Dynamic buffer, used for content & string table.
@@ -38,15 +43,20 @@ struct dbuf {
 	size_t		 coff; /* number of written bytes */
 };
 
+#define DBUF_CHUNKSZ	(64 * 1024)
+
 /* In-memory representation of a CTF section. */
 struct imcs {
 	struct dbuf	 body;
 	struct dbuf	 stab;	/* corresponding string table */
+	struct hash	*htab;	/* hash table of known strings */
 };
 
-#define ROUNDUP(x, y) ((((x) + (y) - 1) / (y)) * (y))
-
-#define DBUF_CHUNKSZ	(64 * 1024)
+struct strentry {
+	struct hash_entry se_key;	/* Must be first */
+#define se_str se_key.hkey
+	size_t		 se_off;
+};
 
 int
 dbuf_realloc(struct dbuf *dbuf, size_t len)
@@ -105,15 +115,25 @@ dbuf_pad(struct dbuf *dbuf, int align)
 size_t
 imcs_add_string(struct imcs *imcs, const char *str)
 {
-	size_t coff = imcs->stab.coff;
+	struct strentry *se;
+	unsigned int slot;
 
 	if (str == NULL || *str == '\0')
 		return 0;
 
-	if (dbuf_copy(&imcs->stab, str, strlen(str) + 1))
-		err(1, "dbuf_copy");
+	se = (struct strentry *)hash_find(imcs->htab, str, &slot);
+	if (se == NULL) {
+		se = malloc(sizeof(*se));
+		if (se == NULL)
+			err(1, "malloc");
+		hash_insert(imcs->htab, slot, &se->se_key, str);
+		se->se_off = imcs->stab.coff;
 
-	return coff;
+		if (dbuf_copy(&imcs->stab, str, strlen(str) + 1))
+			err(1, "dbuf_copy");
+	}
+
+	return se->se_off;
 }
 
 void
@@ -228,6 +248,10 @@ imcs_init(struct imcs *imcs)
 	error = dbuf_realloc(&imcs->stab, DBUF_CHUNKSZ);
 	if (error)
 		return error;
+
+	imcs->htab = hash_init(10);
+	if (imcs->htab == NULL)
+		err(1, "hash_init");
 
 	/* Add empty string */
 	if (dbuf_copy(&imcs->stab, "", 1))
