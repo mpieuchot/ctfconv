@@ -107,7 +107,7 @@ imcs_add_string(struct imcs *imcs, const char *str)
 {
 	size_t coff = imcs->stab.coff;
 
-	if (str == NULL)
+	if (str == NULL || *str == '\0')
 		return 0;
 
 	if (dbuf_copy(&imcs->stab, str, strlen(str) + 1))
@@ -230,7 +230,8 @@ imcs_init(struct imcs *imcs)
 		return error;
 
 	/* Add empty string */
-	imcs_add_string(imcs, "");
+	if (dbuf_copy(&imcs->stab, "", 1))
+		err(1, "dbuf_copy");
 
 	return 0;
 }
