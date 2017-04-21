@@ -31,11 +31,11 @@ struct itype {
 #define	ITF_UNRESOLVED		0x01
 #define	ITF_UNRESOLVED_MEMBERS	0x02
 #define	ITF_FUNCTION		0x04
+#define	ITF_VARARGS		0x08
 	char			*it_name;   /* type name */
 	uint64_t		 it_size;   /* size for struct or union */
 	uint64_t		 it_ref;    /* CU offset of referenced type */
 	uint64_t		 it_nelems; /* # of members or arguments */
-#define VARARGS	0xefef
 	size_t			 it_off;   /* off. of matching ABBREV section */
 	size_t			 it_idx;   /* generated CTF type ID */
 	struct itype		*it_refp;  /* resolved CTF type */

@@ -715,7 +715,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 		uint64_t tag = die->die_dab->dab_tag;
 
 		if (tag == DW_TAG_unspecified_parameters) {
-			it->it_nelems = VARARGS;
+			it->it_flags |= ITF_VARARGS;
 			continue;
 		}
 
