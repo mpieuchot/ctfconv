@@ -812,6 +812,13 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 
 	subparse_arguments(die, psz, it);
 
+	if (it->it_ref == 0) {
+		/* Work around GCC not emiting a type for void */
+		it->it_flags &= ~ITF_UNRESOLVED;
+		it->it_ref = VOID_OFFSET;
+		it->it_refp = void_it;
+	}
+
 	return it;
 }
 uint64_t
