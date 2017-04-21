@@ -475,7 +475,8 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 	it->it_type = type;
 	it->it_name = name;
 
-	if (it->it_ref == 0 && it->it_size == sizeof(void *)) {
+	if (it->it_ref == 0 &&
+	    (it->it_size == sizeof(void *) || type == CTF_K_CONST)) {
 		/* Work around GCC not emiting a type for void */
 		it->it_flags &= ~ITF_UNRESOLVED;
 		it->it_ref = VOID_OFFSET;
