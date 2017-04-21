@@ -280,7 +280,9 @@ dump_type(struct itype *it)
 		printf("\n");
 		break;
 	case CTF_K_ENUM:
-		printf("  [%zd] ENUM\n", it->it_idx);
+		printf("  [%zd] ENUM %s\n", it->it_idx,
+		    (it->it_name != NULL) ? it->it_name : "(anon)");
+		printf("\n");
 		break;
 	case CTF_K_FUNCTION:
 		printf("  [%zd] FUNCTION (%s) returns: %zd args: (",
