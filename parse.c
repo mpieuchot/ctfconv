@@ -146,8 +146,8 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 
 #ifdef DEBUG
 	if (it->it_flags & (ITF_UNRESOLVED|ITF_UNRESOLVED_MEMBERS)) {
-		printf("0x%zx: %s: unresolved 0x%llx", it->it_off, it->it_name,
-		    it->it_ref);
+		printf("0x%zx: %s type=%d unresolved 0x%llx", it->it_off,
+		    it->it_name, it->it_type, it->it_ref);
 		if (toresolve)
 			printf(": %d members", toresolve);
 		printf("\n");
