@@ -319,6 +319,8 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			break;
 		case DW_TAG_subprogram:
 			it = parse_function(die, psz, fidx++);
+			if (it == NULL)
+				continue;
 			break;
 		case DW_TAG_subroutine_type:
 			it = parse_funcptr(die, psz, ++tidx);
@@ -766,6 +768,13 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
 			break;
+		case DW_AT_abstract_origin:
+			/*
+			 * Skip second empty definition for inline
+			 * functions.
+			 */
+			free(name);
+			return NULL;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
 			break;
