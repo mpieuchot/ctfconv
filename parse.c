@@ -336,6 +336,10 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			assert(it->it_type == CTF_K_ARRAY);
 			continue;
 		case DW_TAG_formal_parameter:
+			/* See comment in subparse_arguments(). */
+			if (it->it_type == CTF_K_STRUCT ||
+			    it->it_type == CTF_K_UNION);
+				continue;
 			assert(it->it_type == CTF_K_FUNCTION);
 			continue;
 #if 1
@@ -702,14 +706,23 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 		return;
 
 	/*
-	 * This loop assumes that the children of a DIE are just
-	 * after it on the list.
+	 * This loop assumes that the children of a DIE are after it
+	 * on the list.
 	 */
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
 		uint64_t tag = die->die_dab->dab_tag;
 
 		if (tag == DW_TAG_unspecified_parameters) {
 			it->it_nelems = VARARGS;
+			continue;
+		}
+
+		/*
+		 * This matches the case where a ``struct'' or
+		 * ``union'' is first declared inside a prototype.
+		 */
+		if (tag == DW_TAG_structure_type ||
+		    tag == DW_TAG_union_type) {
 			continue;
 		}
 
