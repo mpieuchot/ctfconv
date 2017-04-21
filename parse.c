@@ -129,10 +129,10 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 				}
 			}
 		}
-
-		if (toresolve == 0)
-			it->it_flags &= ~ITF_UNRESOLVED_MEMBERS;
 	}
+
+	if (toresolve == 0)
+		it->it_flags &= ~ITF_UNRESOLVED_MEMBERS;
 
 	if (it->it_flags & ITF_UNRESOLVED) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
