@@ -46,6 +46,7 @@ struct itype	*insert_void(unsigned int);
 struct itype	*parse_base(struct dwdie *, size_t, unsigned int);
 struct itype	*parse_refers(struct dwdie *, size_t, unsigned int, int);
 struct itype	*parse_array(struct dwdie *, size_t, unsigned int);
+struct itype	*parse_enum(struct dwdie *, size_t, unsigned int);
 struct itype	*parse_struct(struct dwdie *, size_t, unsigned int, int);
 struct itype	*parse_function(struct dwdie *, size_t, unsigned int);
 struct itype	*parse_funcptr(struct dwdie *, size_t, unsigned int);
@@ -290,8 +291,8 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			it = parse_array(die, dcu->dcu_psize, ++tidx);
 			break;
 		case DW_TAG_enumeration_type:
-			++tidx;
-			continue;
+			it = parse_enum(die, dcu->dcu_psize, ++tidx);
+			break;
 		case DW_TAG_pointer_type:
 			it = parse_refers(die, psz, ++tidx, CTF_K_POINTER);
 			break;
@@ -516,6 +517,40 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_name = name;
 
 	subparse_subrange(die, psz, it);
+
+	return it;
+}
+
+struct itype *
+parse_enum(struct dwdie *die, size_t psz, unsigned int i)
+{
+	struct itype *it;
+	struct dwaval *dav;
+	char *name = NULL;
+	uint64_t size = 0;
+
+	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
+		switch (dav->dav_dat->dat_attr) {
+		case DW_AT_byte_size:
+			size = dav2val(dav, psz);
+			break;
+		case DW_AT_name:
+			name = xstrdup(dav2str(dav));
+			break;
+		default:
+			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
+			break;
+		}
+	}
+
+	it = xcalloc(1, sizeof(*it));
+	TAILQ_INIT(&it->it_members);
+	it->it_off = die->die_offset;
+	it->it_ref = 0;
+	it->it_idx = i;
+	it->it_size = size;
+	it->it_type = CTF_K_ENUM;
+	it->it_name = name;
 
 	return it;
 }
