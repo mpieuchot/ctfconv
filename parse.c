@@ -338,10 +338,18 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			assert(it->it_type == CTF_K_ARRAY);
 			continue;
 		case DW_TAG_formal_parameter:
+			/*
+			 * If we skipped the second inline definition,
+			 * skip its arguments.
+			 */
+			if (it == NULL)
+				continue;
+
 			/* See comment in subparse_arguments(). */
 			if (it->it_type == CTF_K_STRUCT ||
-			    it->it_type == CTF_K_UNION);
+			    it->it_type == CTF_K_UNION)
 				continue;
+
 			assert(it->it_type == CTF_K_FUNCTION);
 			continue;
 #if 1
