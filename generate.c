@@ -164,7 +164,8 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	size_t			 size;
 	int			 kind, root, vlen;
 
-	size = sizeof(cts); /* FIXME */
+
+	size = it->it_size;
 	kind = it->it_type;
 	root = 0;
 	/* Function pointers abuse it_nelems for # arguments. */
@@ -172,8 +173,12 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 
 	cts.cts_name = imcs_add_string(imcs, it->it_name);
 	cts.cts_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
-	cts.cts_size = size;
-	cts.cts_type = (it->it_refp != NULL) ? it->it_refp->it_idx : 0;
+	if (it->it_refp != NULL)
+		cts.cts_type = it->it_refp->it_idx;
+	else if (size > CTF_MAX_SIZE) /* FIXME */
+		warnx("%s: size > CTF_MAX_SIZE (%zd)", it->it_name, size);
+	else
+		cts.cts_size = size;
 
 	if (dbuf_copy(&imcs->body, &cts, sizeof(cts)))
 		err(1, "dbuf_copy");
