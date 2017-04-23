@@ -249,7 +249,8 @@ dump_type(struct itype *it)
 		break;
 	case CTF_K_VOLATILE:
 		printf("  <%zd> VOLATILE %s refers to %zd\n", it->it_idx,
-		    it->it_name, it->it_refp->it_idx);
+		    (it->it_name != NULL) ? it->it_name : "(anon)",
+		    it->it_refp->it_idx);
 		break;
 	case CTF_K_CONST:
 		printf("  <%zd> CONST %s refers to %zd\n", it->it_idx,
