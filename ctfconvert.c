@@ -274,9 +274,9 @@ dump_type(struct itype *it)
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
 		    it->it_size);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
-			printf("\t%s type=%zd (0x%llx) off=%zd\n",
+			printf("\t%s type=%zd off=%zd\n",
 			    (im->im_name != NULL) ? im->im_name : "unknown",
-			    im->im_refp->it_idx, im->im_ref, im->im_loc);
+			    im->im_refp->it_idx, im->im_off);
 		}
 		printf("\n");
 		break;

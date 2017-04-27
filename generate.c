@@ -205,7 +205,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 				ctm.ctm_name =
 				    imcs_add_string(imcs, im->im_name);
 				ctm.ctm_type = im->im_refp->it_idx;
-				ctm.ctm_offset = im->im_loc;
+				ctm.ctm_offset = im->im_off;
 
 				if (dbuf_copy(&imcs->body, &ctm, sizeof(ctm)))
 					err(1, "dbuf_copy");
@@ -218,7 +218,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 				ctlm.ctlm_name =
 				    imcs_add_string(imcs, im->im_name);
 				ctlm.ctlm_type = im->im_refp->it_idx;
-				ctlm.ctlm_offsetlo = im->im_loc; /* FIXME */
+				ctlm.ctlm_offsetlo = im->im_off; /* FIXME */
 
 				if (dbuf_copy(&imcs->body, &ctlm, sizeof(ctlm)))
 					err(1, "dbuf_copy");

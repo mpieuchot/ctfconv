@@ -653,7 +653,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 	struct imember *im;
 	struct dwaval *dav;
 	const char *name = NULL;
-	uint64_t loc = 0, ref = 0;
+	uint64_t off = 0, ref = 0;
 	uint16_t bits;
 
 	assert(it->it_type == CTF_K_STRUCT || it->it_type == CTF_K_UNION);
@@ -680,7 +680,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 				ref = dav2val(dav, psz);
 				break;
 			case DW_AT_data_member_location:
-				loc = 8 * dav2val(dav, psz);
+				off = dav2val(dav, psz);
 				break;
 			case DW_AT_bit_size:
 				bits = dav2val(dav, psz);
@@ -693,7 +693,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 		}
 
 		im = xcalloc(1, sizeof(*im));
-		im->im_loc = loc;
+		im->im_off = off;
 		im->im_ref = ref;
 		im->im_name = name;
 
@@ -869,7 +869,7 @@ dav2val(struct dwaval *dav, size_t psz)
 	case DW_FORM_block2:
 	case DW_FORM_block4:
 	case DW_FORM_block:
-		val = dav->dav_buf.len;
+		dw_loc_parse(&dav->dav_buf, NULL, &val, NULL);
 		break;
 	case DW_FORM_flag:
 	case DW_FORM_data1:

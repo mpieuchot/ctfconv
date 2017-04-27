@@ -51,7 +51,7 @@ struct imember {
 	TAILQ_ENTRY(imember)	 im_next;
 	const char		*im_name;   /* struct or union field name */
 	uint64_t		 im_ref;    /* CU offset of the field type */
-	size_t			 im_loc;    /* FIXME: field offset */
+	size_t			 im_off;    /* field offset in struct/union */
 	struct itype		*im_refp;   /* resolved CTF type */
 };
 
