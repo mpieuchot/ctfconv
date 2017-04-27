@@ -34,21 +34,23 @@ struct dwaval {
 	union {
 		struct dwbuf	 _buf;
 		struct {
-			uint64_t	 _u64;
-			int64_t		 _s64;
-			uint32_t	 _u32;
-			uint16_t	 _u16;
-			uint8_t		 _u8;
 			const char	*_str;
+			union {
+				uint64_t	 _u64;
+				int64_t		 _s64;
+				uint32_t	 _u32;
+				uint16_t	 _u16;
+				uint8_t		 _u8;
+			} _T;
 		} _V;
 	} AV;
 #define dav_buf	AV._buf
-#define dav_u64	AV._V._u64
-#define dav_s64	AV._V._s64
-#define dav_u32	AV._V._u32
-#define dav_u16	AV._V._u16
-#define dav_u8	AV._V._u8
 #define dav_str	AV._V._str
+#define dav_u64	AV._V._T._u64
+#define dav_s64	AV._V._T._s64
+#define dav_u32	AV._V._T._u32
+#define dav_u16	AV._V._T._u16
+#define dav_u8	AV._V._T._u8
 };
 
 SIMPLEQ_HEAD(dwaval_queue, dwaval);
@@ -86,6 +88,9 @@ struct dwcu {
 const char	*dw_tag2name(uint64_t);
 const char	*dw_at2name(uint64_t);
 const char	*dw_form2name(uint64_t);
+const char	*dw_op2name(uint8_t);
+
+int	 dw_loc_parse(struct dwbuf *, uint8_t *, uint64_t *, uint64_t *);
 
 int	 dw_ab_parse(struct dwbuf *, struct dwabbrev_queue *);
 int	 dw_cu_parse(struct dwbuf *, struct dwbuf *, size_t, struct dwcu **);

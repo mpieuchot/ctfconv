@@ -258,6 +258,22 @@ dw_form2name(uint64_t form)
 	return NULL;
 }
 
+const char *
+dw_op2name(uint8_t op)
+{
+	static const char *dw_ops[] = { DW_OP_NAMES };
+
+	if (op <= nitems(dw_ops))
+		return dw_ops[op - 1];
+
+	if (op == DW_OP_lo_user)
+		return "DW_OP_lo_user";
+	if (op == DW_OP_hi_user)
+		return "DW_OP_hi_user";
+
+	return NULL;
+}
+
 static int
 dw_attr_parse(struct dwbuf *dwbuf, struct dwattr *dat, uint8_t psz,
     struct dwaval_queue *davq)
@@ -598,4 +614,33 @@ dw_dcu_free(struct dwcu *dcu)
 	dw_die_purge(&dcu->dcu_dies);
 	dw_dabq_purge(&dcu->dcu_abbrevs);
 	free(dcu);
+}
+
+int
+dw_loc_parse(struct dwbuf *dwbuf, uint8_t *pop, uint64_t *poper1,
+    uint64_t *poper2)
+{
+	uint64_t oper1 = 0, oper2 = 0;
+	uint8_t op;
+
+	if (dw_read_u8(dwbuf, &op))
+		return -1;
+
+	if (pop != NULL)
+		*pop = op;
+
+	switch (op) {
+	case DW_OP_plus_uconst:
+		dw_read_uleb128(dwbuf, &oper1);
+		break;
+	default:
+		return ENOTSUP;
+	}
+
+	if (poper1 != NULL)
+		*poper1 = oper1;
+	if (poper2 != NULL)
+		*poper2 = oper2;
+
+	return 0;
 }
