@@ -257,11 +257,14 @@ imcs_init(struct imcs *imcs)
 int
 generate(const char *path, const char *label, uint8_t flags)
 {
-	struct ctf_header	 cth = { CTF_MAGIC, CTF_VERSION };
+	struct ctf_header	 cth;
 	struct imcs		 imcs;
 	int			 error, fd;
 	struct ctf_lblent	 ctl;
 	struct itype		 *it;
+
+	cth.cth_magic = CTF_MAGIC;
+	cth.cth_version = CTF_VERSION;
 
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd == -1) {
