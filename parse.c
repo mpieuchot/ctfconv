@@ -29,10 +29,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ctfconvert.h"
+#include "xmalloc.h"
 #include "dwarf.h"
 #include "dw.h"
-#include "itype.h"
-#include "xmalloc.h"
 
 #define DPRINTF(x...)	do { /*printf(x)*/ } while (0)
 

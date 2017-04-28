@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "itype.h"
+#include "ctfconvert.h"
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))

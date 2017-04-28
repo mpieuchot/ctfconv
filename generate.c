@@ -27,9 +27,9 @@
 #include <stdint.h>
 #include <unistd.h>
 
-#include "hash.h"
-#include "itype.h"
+#include "ctfconvert.h"
 #include "xmalloc.h"
+#include "hash.h"
 
 #define ROUNDUP(x, y) ((((x) + (y) - 1) / (y)) * (y))
 
