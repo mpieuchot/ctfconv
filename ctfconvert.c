@@ -42,11 +42,9 @@
 #define DEBUG_LINE	".debug_line"
 #define DEBUG_STR	".debug_str"
 
-#define DUMP		(1 << 0)	/* ctfdump(1) like SUNW_ctf sections */
-
 __dead void	 usage(void);
 int		 convert(const char *);
-int		 generate(const char *, const char *, uint8_t);
+int		 generate(const char *, const char *, int);
 int		 elf_convert(char *, size_t);
 void		 dump_type(struct itype *);
 void		 dump_func(struct itype *);
@@ -79,16 +77,19 @@ int
 main(int argc, char *argv[])
 {
 	const char *filename, *label = NULL, *outfile = NULL;
-	uint8_t flags = 0;
+	int dump = 0, compress = 0;
 	int ch, error = 0;
 	struct itype *it;
 
 	setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "dl:o:")) != -1) {
+	while ((ch = getopt(argc, argv, "cdl:o:")) != -1) {
 		switch (ch) {
+		case 'c':
+			compress = 1;
+			break;
 		case 'd':
-			flags |= DUMP;
+			dump = 1;	/* ctfdump(1) like SUNW_ctf sections */
 			break;
 		case 'l':
 			if (label != NULL)
@@ -117,7 +118,7 @@ main(int argc, char *argv[])
 			return error;
 	}
 
-	if (flags & DUMP) {
+	if (dump) {
 		TAILQ_FOREACH(it, &itypeq, it_next) {
 			if (!(it->it_flags & ITF_FUNCTION))
 				continue;
@@ -134,7 +135,7 @@ main(int argc, char *argv[])
 	}
 
 	if (outfile != NULL) {
-		error = generate(outfile, label, 0);
+		error = generate(outfile, label, compress);
 		if (error != 0)
 			return error;
 	}

@@ -27,6 +27,10 @@
 #include <stdint.h>
 #include <unistd.h>
 
+#ifdef ZLIB
+#include <zlib.h>
+#endif /* ZLIB */
+
 #include "ctfconvert.h"
 #include "xmalloc.h"
 #include "hash.h"
@@ -59,6 +63,10 @@ struct strentry {
 	size_t		 se_off;
 };
 
+#ifdef ZLIB
+char		*data_compress(const char *, size_t, off_t, size_t *);
+#endif /* ZLIB */
+
 void
 dbuf_realloc(struct dbuf *dbuf, size_t len)
 {
@@ -70,7 +78,7 @@ dbuf_realloc(struct dbuf *dbuf, size_t len)
 	dbuf->cptr = dbuf->data + dbuf->coff;
 }
 
-int
+void
 dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 {
 	off_t coff, left;
@@ -81,7 +89,7 @@ dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 	assert(dbuf->size != 0);
 
 	if (len == 0)
-		return 0;
+		return;
 
 	left = dbuf->size - dbuf->coff;
 	if (left < len)
@@ -90,8 +98,6 @@ dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 	memcpy(dbuf->cptr, data, len);
 	dbuf->cptr += len;
 	dbuf->coff += len;
-
-	return 0;
 }
 
 size_t
@@ -120,8 +126,7 @@ imcs_add_string(struct imcs *imcs, const char *str)
 		hash_insert(imcs->htab, slot, &se->se_key, str);
 		se->se_off = imcs->stab.coff;
 
-		if (dbuf_copy(&imcs->stab, str, strlen(str) + 1))
-			err(1, "dbuf_copy");
+		dbuf_copy(&imcs->stab, str, strlen(str) + 1);
 	}
 
 	return se->se_off;
@@ -140,17 +145,14 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 	vlen = it->it_nelems;
 
 	func = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
-	if (dbuf_copy(&imcs->body, &func, sizeof(func)))
-		err(1, "dbuf_copy");
+	dbuf_copy(&imcs->body, &func, sizeof(func));
 
 	func = it->it_refp->it_idx;
-	if (dbuf_copy(&imcs->body, &func, sizeof(func)))
-		err(1, "dbuf_copy");
+	dbuf_copy(&imcs->body, &func, sizeof(func));
 
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
 		arg = im->im_refp->it_idx;
-		if (dbuf_copy(&imcs->body, &arg, sizeof(arg)))
-			err(1, "dbuf_copy");
+		dbuf_copy(&imcs->body, &arg, sizeof(arg));
 	}
 }
 
@@ -180,20 +182,17 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	else
 		cts.cts_size = size;
 
-	if (dbuf_copy(&imcs->body, &cts, sizeof(cts)))
-		err(1, "dbuf_copy");
+	dbuf_copy(&imcs->body, &cts, sizeof(cts));
 
 	switch (kind) {
 	case CTF_K_INTEGER:
 	case CTF_K_FLOAT:
 		eob = 0; /* FIXME */
-		if (dbuf_copy(&imcs->body, &eob, sizeof(eob)))
-			err(1, "dbuf_copy");
+		dbuf_copy(&imcs->body, &eob, sizeof(eob));
 		break;
 	case CTF_K_ARRAY:
 		memset(&cta, 0, sizeof(cta));
-		if (dbuf_copy(&imcs->body, &cta, sizeof(cta)))
-			err(1, "dbuf_copy");
+		dbuf_copy(&imcs->body, &cta, sizeof(cta));
 		break;
 	case CTF_K_STRUCT:
 	case CTF_K_UNION:
@@ -207,8 +206,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 				ctm.ctm_type = im->im_refp->it_idx;
 				ctm.ctm_offset = im->im_off;
 
-				if (dbuf_copy(&imcs->body, &ctm, sizeof(ctm)))
-					err(1, "dbuf_copy");
+				dbuf_copy(&imcs->body, &ctm, sizeof(ctm));
 			}
 		} else {
 			struct ctf_lmember	 ctlm;
@@ -220,8 +218,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 				ctlm.ctlm_type = im->im_refp->it_idx;
 				ctlm.ctlm_offsetlo = im->im_off; /* FIXME */
 
-				if (dbuf_copy(&imcs->body, &ctlm, sizeof(ctlm)))
-					err(1, "dbuf_copy");
+				dbuf_copy(&imcs->body, &ctlm, sizeof(ctlm));
 			}
 		}
 		break;
@@ -230,7 +227,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	}
 }
 
-int
+void
 imcs_init(struct imcs *imcs)
 {
 	int error;
@@ -245,38 +242,31 @@ imcs_init(struct imcs *imcs)
 		err(1, "hash_init");
 
 	/* Add empty string */
-	if (dbuf_copy(&imcs->stab, "", 1))
-		err(1, "dbuf_copy");
-
-	return 0;
+	dbuf_copy(&imcs->stab, "", 1);
 }
 
 /*
  * Generate a CTF buffer from the internal type representation.
  */
 int
-generate(const char *path, const char *label, uint8_t flags)
+generate(const char *path, const char *label, int compress)
 {
 	struct ctf_header	 cth;
 	struct imcs		 imcs;
 	int			 error, fd;
 	struct ctf_lblent	 ctl;
-	struct itype		 *it;
+	struct itype		*it;
+
 
 	cth.cth_magic = CTF_MAGIC;
 	cth.cth_version = CTF_VERSION;
 
-	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd == -1) {
-		warn("open %s", path);
-		return 1;
-	}
+#ifdef ZLIB
+	if (compress)
+		cth.cth_flags = CTF_F_COMPRESS;
+#endif /* ZLIB */
 
-	error = imcs_init(&imcs);
-	if (error)
-		goto out;
-
-	cth.cth_flags = flags;
+	imcs_init(&imcs);
 
 	/* FIXME */
 	cth.cth_parlabel = 0;
@@ -291,9 +281,7 @@ generate(const char *path, const char *label, uint8_t flags)
 	ctl.ctl_typeidx = 42; /* FIXME */
 
 	/* Fill the buffer */
-	error = dbuf_copy(&imcs.body, &ctl, sizeof(ctl));
-	if (error)
-		goto out;
+	dbuf_copy(&imcs.body, &ctl, sizeof(ctl));
 
 	/* FIXME */
 	cth.cth_objtoff = dbuf_pad(&imcs.body, 2);
@@ -324,25 +312,107 @@ generate(const char *path, const char *label, uint8_t flags)
 	cth.cth_stroff = imcs.body.coff;
 	cth.cth_strlen = imcs.stab.coff;
 
-	/* Write header */
-	if (write(fd, &cth, sizeof(cth)) != sizeof(cth)) {
-		warn("unable to write %zu bytes for %s", sizeof(cth), path);
+	char			*p, *ctfdata = NULL;
+	size_t			 ctflen;
+
+	ctflen = sizeof(cth) + imcs.body.coff + imcs.stab.coff;
+	p = ctfdata = xmalloc(ctflen);
+
+	memcpy(p, &cth, sizeof(cth));
+	p += sizeof(cth);
+
+	memcpy(p, imcs.body.data, imcs.body.coff);
+	p += imcs.body.coff;
+
+	memcpy(p, imcs.stab.data, imcs.stab.coff);
+	p += imcs.stab.coff;
+
+	assert((p - ctfdata) == ctflen);
+
+#ifdef ZLIB
+	if (compress) {
+		char *cdata;
+		size_t clen;
+
+		cdata = data_compress(ctfdata + sizeof(cth),
+		    ctflen - sizeof(cth), ctflen - sizeof(cth), &clen);
+		if (cdata == NULL) {
+			warnx("compressing CTF data");
+			free(ctfdata);
+			return -1;
+		}
+
+		memcpy(ctfdata + sizeof(cth), cdata, clen);
+		ctflen = clen + sizeof(cth);
+
+		free(cdata);
+	}
+#endif /* ZLIB */
+
+	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd == -1) {
+		warn("open %s", path);
+		free(ctfdata);
 		return -1;
 	}
 
-	/* Write buffer */
-	if (write(fd, imcs.body.data, imcs.body.coff) != imcs.body.coff) {
-		warn("unable to write %zu bytes for %s", imcs.body.coff, path);
-		return -1;
+	if (write(fd, ctfdata, ctflen) != ctflen) {
+		warn("unable to write %zu bytes for %s", ctflen, path);
+		error = -1;
 	}
 
-	/* Write string table */
-	if (write(fd, imcs.stab.data, imcs.stab.coff) != imcs.stab.coff) {
-		warn("unable to write %zu bytes for %s", imcs.stab.coff, path);
-		return -1;
-	}
-
-out:
 	close(fd);
+	free(ctfdata);
 	return error;
 }
+
+#ifdef ZLIB
+char *
+data_compress(const char *buf, size_t size, off_t len, size_t *pclen)
+{
+	z_stream		 stream;
+	char			*data;
+	int			 error;
+
+	data = malloc(len);
+	if (data == NULL) {
+		warn(NULL);
+		return NULL;
+	}
+
+	memset(&stream, 0, sizeof(stream));
+	stream.zalloc = Z_NULL;
+	stream.zfree = Z_NULL;
+	stream.opaque = Z_NULL;
+
+	if ((error = deflateInit(&stream, Z_BEST_COMPRESSION)) != Z_OK) {
+		warnx("zlib deflateInit failed: %s", zError(error));
+		goto exit;
+	}
+
+	stream.next_in = (void *)buf;
+	stream.avail_in = size;
+	stream.next_out = (unsigned char *)data;
+	stream.avail_out = len;
+
+	if ((error = deflate(&stream, Z_FINISH)) != Z_STREAM_END) {
+		warnx("zlib deflate failed: %s", zError(error));
+		deflateEnd(&stream);
+		goto exit;
+	}
+
+	if ((error = deflateEnd(&stream)) != Z_OK) {
+		warnx("zlib deflateEnd failed: %s", zError(error));
+		goto exit;
+	}
+
+	if (pclen != NULL)
+		*pclen = stream.total_out;
+
+	return data;
+
+exit:
+	free(data);
+	return NULL;
+}
+#endif /* ZLIB */
