@@ -228,9 +228,11 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 }
 
 void
-imcs_init(struct imcs *imcs)
+imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 {
-	int error;
+	struct itype		*it;
+	struct ctf_lblent	 ctl;
+	int			 error;
 
 	memset(imcs, 0, sizeof(*imcs));
 
@@ -243,6 +245,50 @@ imcs_init(struct imcs *imcs)
 
 	/* Add empty string */
 	dbuf_copy(&imcs->stab, "", 1);
+
+	/* FIXME */
+	cth->cth_parlabel = 0;
+	cth->cth_parname = 0;
+
+	/*
+	 * Insert label
+	 */
+	cth->cth_lbloff = 0;
+
+	ctl.ctl_label = imcs_add_string(imcs, label);
+	ctl.ctl_typeidx = 42; /* FIXME */
+
+	/* Fill the buffer */
+	dbuf_copy(&imcs->body, &ctl, sizeof(ctl));
+
+	/* FIXME */
+	cth->cth_objtoff = dbuf_pad(&imcs->body, 2);
+
+	/*
+	 * Insert functions
+	 */
+	cth->cth_funcoff = dbuf_pad(&imcs->body, 2);
+	TAILQ_FOREACH(it, &itypeq, it_next) {
+		if (!(it->it_flags & ITF_FUNCTION))
+			continue;
+
+		imcs_add_func(imcs, it);
+	}
+
+	/*
+	 * Insert types
+	 */
+	cth->cth_typeoff = dbuf_pad(&imcs->body, 4);
+	TAILQ_FOREACH(it, &itypeq, it_next) {
+		if (it->it_flags & ITF_FUNCTION)
+			continue;
+
+		imcs_add_type(imcs, it);
+	}
+
+	/* String table is written from its own buffer. */
+	cth->cth_stroff = imcs->body.coff;
+	cth->cth_strlen = imcs->stab.coff;
 }
 
 /*
@@ -251,12 +297,11 @@ imcs_init(struct imcs *imcs)
 int
 generate(const char *path, const char *label, int compress)
 {
+	char			*p, *ctfdata = NULL;
+	size_t			 ctflen;
 	struct ctf_header	 cth;
 	struct imcs		 imcs;
 	int			 error, fd;
-	struct ctf_lblent	 ctl;
-	struct itype		*it;
-
 
 	cth.cth_magic = CTF_MAGIC;
 	cth.cth_version = CTF_VERSION;
@@ -266,54 +311,7 @@ generate(const char *path, const char *label, int compress)
 		cth.cth_flags = CTF_F_COMPRESS;
 #endif /* ZLIB */
 
-	imcs_init(&imcs);
-
-	/* FIXME */
-	cth.cth_parlabel = 0;
-	cth.cth_parname = 0;
-
-	/*
-	 * Insert label
-	 */
-	cth.cth_lbloff = 0;
-
-	ctl.ctl_label = imcs_add_string(&imcs, label);
-	ctl.ctl_typeidx = 42; /* FIXME */
-
-	/* Fill the buffer */
-	dbuf_copy(&imcs.body, &ctl, sizeof(ctl));
-
-	/* FIXME */
-	cth.cth_objtoff = dbuf_pad(&imcs.body, 2);
-
-	/*
-	 * Insert functions
-	 */
-	cth.cth_funcoff = dbuf_pad(&imcs.body, 2);
-	TAILQ_FOREACH(it, &itypeq, it_next) {
-		if (!(it->it_flags & ITF_FUNCTION))
-			continue;
-
-		imcs_add_func(&imcs, it);
-	}
-
-	/*
-	 * Insert types
-	 */
-	cth.cth_typeoff = dbuf_pad(&imcs.body, 4);
-	TAILQ_FOREACH(it, &itypeq, it_next) {
-		if (it->it_flags & ITF_FUNCTION)
-			continue;
-
-		imcs_add_type(&imcs, it);
-	}
-
-	/* String table is written from its own buffer. */
-	cth.cth_stroff = imcs.body.coff;
-	cth.cth_strlen = imcs.stab.coff;
-
-	char			*p, *ctfdata = NULL;
-	size_t			 ctflen;
+	imcs_generate(&imcs, &cth, label);
 
 	ctflen = sizeof(cth) + imcs.body.coff + imcs.stab.coff;
 	p = ctfdata = xmalloc(ctflen);
