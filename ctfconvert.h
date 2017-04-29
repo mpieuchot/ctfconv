@@ -32,16 +32,19 @@ struct itype {
 #define	ITF_UNRESOLVED_MEMBERS	0x02
 #define	ITF_FUNCTION		0x04
 #define	ITF_VARARGS		0x08
-	char			*it_name;   /* type name */
-	uint64_t		 it_size;   /* size for struct or union */
-	uint64_t		 it_ref;    /* CU offset of referenced type */
-	uint64_t		 it_nelems; /* # of members or arguments */
-	size_t			 it_off;   /* off. of matching ABBREV section */
-	size_t			 it_idx;   /* generated CTF type ID */
-	struct itype		*it_refp;  /* resolved CTF type */
-	int			 it_type;  /* CTF_K_* type */
-	uint16_t		 it_enc;   /* CTF base type encoding */
-	uint16_t		 it_bits;  /* CTF base type bits */
+
+	size_t			 it_off;    /* DWARF: matching .abbrev offset */
+	uint64_t		 it_ref;    /* DWARF: CU offset of ref. type */
+
+	struct itype		*it_refp;   /* itype: resolved type */
+
+	char			*it_name;   /* CTF: type name */
+	uint64_t		 it_size;   /* CTF: size for struct or union */
+	uint64_t		 it_nelems; /* CTF: # of members or arguments */
+	size_t			 it_idx;    /* CTF: generated type ID */
+	int			 it_type;   /* CTF: type */
+	uint16_t		 it_enc;    /* CTF: base type encoding */
+	uint16_t		 it_bits;   /* CTF: base type bits */
 };
 
 /*
