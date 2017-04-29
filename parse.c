@@ -179,7 +179,9 @@ it_free(struct itype *it)
 int
 it_match(struct itype *a, struct itype *b)
 {
-	if ((a->it_type != b->it_type) || (a->it_nelems != b->it_nelems))
+	if ((a->it_type != b->it_type) ||
+	    (a->it_size != b->it_size) ||
+	    (a->it_nelems != b->it_nelems))
 		return 0;
 
 	if ((a->it_name != NULL) && (b->it_name != NULL) &&
