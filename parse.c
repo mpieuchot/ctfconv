@@ -181,6 +181,7 @@ it_match(struct itype *a, struct itype *b)
 {
 	if ((a->it_type != b->it_type) ||
 	    (a->it_size != b->it_size) ||
+	    (a->it_bits != b->it_bits) ||
 	    (a->it_nelems != b->it_nelems))
 		return 0;
 
