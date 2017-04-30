@@ -2,7 +2,8 @@
 PROG=		ctfconvert
 SRCS=		ctfconvert.c parse.c elf.c dw.c generate.c hash.c xmalloc.c
 
-CFLAGS+=	-W -Wall -Wno-unused -Wstrict-prototypes -Wno-unused-parameter
+CFLAGS+=	-W -Wall -Wno-unused -Wstrict-prototypes -Wno-unused-parameter \
+		-Wno-uninitialized
 
 CFLAGS+=	-DZLIB
 LDADD+=		-lz

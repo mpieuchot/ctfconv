@@ -82,7 +82,6 @@ void
 dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 {
 	off_t coff, left;
-	int error;
 
 	assert(dbuf->cptr != NULL);
 	assert(dbuf->data != NULL);
@@ -232,7 +231,6 @@ imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 {
 	struct itype		*it;
 	struct ctf_lblent	 ctl;
-	int			 error;
 
 	memset(imcs, 0, sizeof(*imcs));
 
@@ -361,7 +359,7 @@ generate(const char *path, const char *label, int compress)
 
 	close(fd);
 	free(ctfdata);
-	return error;
+	return 0;
 }
 
 #ifdef ZLIB
