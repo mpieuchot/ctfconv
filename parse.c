@@ -352,7 +352,8 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			/* See comment in subparse_arguments(). */
 			if (it->it_type == CTF_K_STRUCT ||
 			    it->it_type == CTF_K_UNION ||
-			    it->it_type == CTF_K_ENUM)
+			    it->it_type == CTF_K_ENUM ||
+			    it->it_type == CTF_K_TYPEDEF)
 				continue;
 
 			assert(it->it_type == CTF_K_FUNCTION);
@@ -733,14 +734,15 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 		}
 
 		/*
-		 * This matches the case where a ``struct'', ``union''
-		 * or ``enum'' is first declared inside a prototype.
+		 * Nested declaration.
+		 *
+		 * This matches the case where a ``struct'', ``union'',
+		 * ``enum'' or ``typedef'' is first declared "inside" a
+		 * function declaration.
 		 */
-		if (tag == DW_TAG_structure_type ||
-		    tag == DW_TAG_union_type ||
-		    tag == DW_TAG_enumeration_type) {
+		if (tag == DW_TAG_structure_type || tag == DW_TAG_union_type ||
+		    tag == DW_TAG_enumeration_type || tag == DW_TAG_typedef)
 			continue;
-		}
 
 		if (tag != DW_TAG_formal_parameter)
 			break;
