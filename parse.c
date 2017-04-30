@@ -334,8 +334,9 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 		 * parsing them.
 		 */
 		 case DW_TAG_member:
-			assert(it->it_type == CTF_K_STRUCT ||
-			    it->it_type == CTF_K_UNION);
+			 assert(it->it_type == CTF_K_STRUCT ||
+			    it->it_type == CTF_K_UNION ||
+			    it->it_type == CTF_K_ENUM);
 			continue;
 		 case DW_TAG_subrange_type:
 			assert(it->it_type == CTF_K_ARRAY);
