@@ -301,6 +301,8 @@ generate(const char *path, const char *label, int compress)
 	struct imcs		 imcs;
 	int			 error, fd;
 
+	memset(&cth, 0, sizeof(cth));
+
 	cth.cth_magic = CTF_MAGIC;
 	cth.cth_version = CTF_VERSION;
 
