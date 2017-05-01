@@ -231,13 +231,15 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 
 		/* First look if we already have this type. */
 		duplicate = 0;
-		prev = TAILQ_FIRST(itypeq);
-		while (prev != last) {
+		for (prev = TAILQ_FIRST(itypeq); prev != last;
+		    prev = TAILQ_NEXT(prev, it_next)) {
+			if (prev->it_flags & ITF_FUNCTION)
+				continue;
+
 			if (it_match(it, prev)) {
 				duplicate = 1;
 				break;
 			}
-			prev = TAILQ_NEXT(prev, it_next);
 		}
 
 		if (duplicate) {
