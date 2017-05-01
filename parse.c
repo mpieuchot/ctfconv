@@ -59,8 +59,9 @@ uint64_t	 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
-struct itype	*void_it;
-unsigned int	 tidx, fidx;	/* type and function indexes */
+SIMPLEQ_HEAD(, itype)	 itypel[CTF_K_MAX];
+struct itype		*void_it;
+unsigned int		 tidx, fidx;	/* type and function indexes */
 
 /*
  * Construct a list of internal type and functions based on DWARF
@@ -72,13 +73,17 @@ struct itype_queue *
 dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
     size_t ablen)
 {
-	struct dwbuf	 info = { .buf = infobuf, .len = infolen };
-	struct dwbuf	 abbrev = { .buf = abbuf, .len = ablen };
-	struct dwcu	*dcu = NULL;
-	struct itype_queue *itypeq;
+	struct dwbuf		 info = { .buf = infobuf, .len = infolen };
+	struct dwbuf		 abbrev = { .buf = abbuf, .len = ablen };
+	struct dwcu		*dcu = NULL;
+	struct itype_queue	*itypeq;
+	int			 i;
 
 	itypeq = xcalloc(1, sizeof(*itypeq));
 	TAILQ_INIT(itypeq);
+
+	for (i = 0; i < CTF_K_MAX; i++)
+		SIMPLEQ_INIT(&itypel[i]);
 
 	tidx = fidx = 0;
 
@@ -229,13 +234,9 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 		if (it->it_flags & ITF_FUNCTION)
 			continue;
 
-		/* First look if we already have this type. */
 		duplicate = 0;
-		for (prev = TAILQ_FIRST(itypeq); prev != last;
-		    prev = TAILQ_NEXT(prev, it_next)) {
-			if (prev->it_flags & ITF_FUNCTION)
-				continue;
-
+		/* Look if we already have this type. */
+		SIMPLEQ_FOREACH(prev, &itypel[it->it_type], it_list) {
 			if (it_match(it, prev)) {
 				duplicate = 1;
 				break;
@@ -269,6 +270,8 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 			}
 
 			it_free(old);
+		} else {
+			SIMPLEQ_INSERT_TAIL(&itypel[it->it_type], it, it_list);
 		}
 	}
 

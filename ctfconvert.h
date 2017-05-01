@@ -25,7 +25,8 @@ struct imember;
  * variables to their intrinsics.
  */
 struct itype {
-	TAILQ_ENTRY(itype)	 it_next;
+	TAILQ_ENTRY(itype)	 it_next;   /* itype: global queue of types */
+	SIMPLEQ_ENTRY(itype)	 it_list;   /* itype: per-type queue of types */
 	TAILQ_HEAD(, imember)	 it_members;
 	unsigned int		 it_flags;
 #define	ITF_UNRESOLVED		0x01
