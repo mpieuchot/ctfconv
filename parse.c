@@ -22,6 +22,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/ctf.h>
 
 #include <assert.h>
@@ -59,9 +60,14 @@ size_t		 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
-SIMPLEQ_HEAD(, itype)	 itypel[CTF_K_MAX];
-struct itype		*void_it;
-uint16_t		 tidx, fidx;	/* type and function indexes */
+int		 it_cmp(struct itype *, struct itype *);
+
+RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
+struct itype			*void_it;
+uint16_t			 tidx, fidx;	/* type and function indexes */
+
+
+RB_GENERATE(itype_tree, itype, it_node, it_cmp);
 
 /*
  * Construct a list of internal type and functions based on DWARF
@@ -83,7 +89,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	TAILQ_INIT(itypeq);
 
 	for (i = 0; i < CTF_K_MAX; i++)
-		SIMPLEQ_INIT(&itypel[i]);
+		RB_INIT(&itypet[i]);
 
 	tidx = fidx = 0;
 
@@ -222,8 +228,6 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 {
 	struct itype *it, *nit;
 	struct itype *prev, *last;
-	int duplicate;
-
 
 	/* Remember last of the existing types. */
 	last = TAILQ_LAST(itypeq, itype_queue);
@@ -244,16 +248,9 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 		if (it->it_flags & ITF_FUNCTION)
 			continue;
 
-		duplicate = 0;
 		/* Look if we already have this type. */
-		SIMPLEQ_FOREACH(prev, &itypel[it->it_type], it_list) {
-			if (it_cmp(it, prev) == 0) {
-				duplicate = 1;
-				break;
-			}
-		}
-
-		if (duplicate) {
+		prev = RB_FIND(itype_tree, &itypet[it->it_type], it);
+		if (prev != NULL) {
 			struct itype *old = it;
 
 			/* Remove duplicate */
@@ -281,7 +278,7 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 
 			it_free(old);
 		} else {
-			SIMPLEQ_INSERT_TAIL(&itypel[it->it_type], it, it_list);
+			RB_INSERT(itype_tree, &itypet[it->it_type], it);
 		}
 	}
 

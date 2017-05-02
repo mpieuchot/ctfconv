@@ -15,7 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-
 struct imember;
 
 /*
@@ -26,7 +25,7 @@ struct imember;
  */
 struct itype {
 	TAILQ_ENTRY(itype)	 it_next;   /* itype: global queue of types */
-	SIMPLEQ_ENTRY(itype)	 it_list;   /* itype: per-type queue of types */
+	RB_ENTRY(itype)		 it_node;   /* itype: per-type tree of types */
 	TAILQ_HEAD(, imember)	 it_members;
 
 	size_t			 it_off;    /* DWARF: matching .abbrev offset */

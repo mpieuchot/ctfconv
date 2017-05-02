@@ -16,6 +16,7 @@
 
 #include <sys/types.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 #include <sys/ctf.h>
 
 #include <assert.h>
