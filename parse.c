@@ -179,29 +179,35 @@ it_free(struct itype *it)
 }
 
 /*
- * Return 1 if ``a'' matches ``b'', 0 otherwise.
+ * Return 0 if ``a'' matches ``b''.
  */
 int
-it_match(struct itype *a, struct itype *b)
+it_cmp(struct itype *a, struct itype *b)
 {
-	if ((a->it_type != b->it_type) ||
-	    (a->it_size != b->it_size) ||
-	    (a->it_nelems != b->it_nelems))
-		return 0;
+	int diff;
+
+	if ((diff = (a->it_type - b->it_type)) != 0)
+		return diff;
+
+	if ((diff = (a->it_size - b->it_size)) != 0)
+		return diff;
+
+	if ((diff = (a->it_nelems - b->it_nelems)) != 0)
+		return diff;
 
 	/* Match by name */
 	if ((a->it_name != NULL) && (b->it_name != NULL))
-		return (strcmp(a->it_name, b->it_name) == 0);
+		return strcmp(a->it_name, b->it_name);
 
 	/* Only one of them is anonym */
 	if (a->it_name != b->it_name)
-		return 0;
+		return (a->it_name == NULL) ? -1 : 1;
 
 	/* Match by reference */
 	if ((a->it_refp != NULL) && (b->it_refp != NULL))
-		return it_match(a->it_refp, b->it_refp);
+		return it_cmp(a->it_refp, b->it_refp);
 
-	return 0;
+	return 1;
 }
 
 /*
@@ -241,7 +247,7 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 		duplicate = 0;
 		/* Look if we already have this type. */
 		SIMPLEQ_FOREACH(prev, &itypel[it->it_type], it_list) {
-			if (it_match(it, prev)) {
+			if (it_cmp(it, prev) == 0) {
 				duplicate = 1;
 				break;
 			}
