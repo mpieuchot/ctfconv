@@ -190,10 +190,15 @@ it_match(struct itype *a, struct itype *b)
 	    (a->it_nelems != b->it_nelems))
 		return 0;
 
-	if ((a->it_name != NULL) && (b->it_name != NULL) &&
-	    (strcmp(a->it_name, b->it_name) == 0))
-		return 1;
+	/* Match by name */
+	if ((a->it_name != NULL) && (b->it_name != NULL))
+		return (strcmp(a->it_name, b->it_name) == 0);
 
+	/* Only one of them is anonym */
+	if (a->it_name != b->it_name)
+		return 0;
+
+	/* Match by reference */
 	if ((a->it_refp != NULL) && (b->it_refp != NULL))
 		return it_match(a->it_refp, b->it_refp);
 
