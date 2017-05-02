@@ -162,7 +162,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	struct ctf_stype	 cts;
 	struct ctf_array	 cta;
 	unsigned int		 eob;
-	size_t			 size;
+	uint32_t		 size;
 	int			 kind, root, vlen;
 
 
@@ -177,7 +177,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	if (it->it_refp != NULL)
 		cts.cts_type = it->it_refp->it_idx;
 	else if (size > CTF_MAX_SIZE) /* FIXME */
-		warnx("%s: size > CTF_MAX_SIZE (%zd)", it->it_name, size);
+		warnx("%s: size > CTF_MAX_SIZE (%u)", it->it_name, size);
 	else
 		cts.cts_size = size;
 

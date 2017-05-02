@@ -55,13 +55,13 @@ void		 subparse_subrange(struct dwdie *, size_t, struct itype *);
 void		 subparse_member(struct dwdie *, size_t, struct itype *);
 void		 subparse_arguments(struct dwdie *, size_t, struct itype *);
 
-uint64_t	 dav2val(struct dwaval *, size_t);
+size_t		 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
 SIMPLEQ_HEAD(, itype)	 itypel[CTF_K_MAX];
 struct itype		*void_it;
-unsigned int		 tidx, fidx;	/* type and function indexes */
+uint16_t		 tidx, fidx;	/* type and function indexes */
 
 /*
  * Construct a list of internal type and functions based on DWARF
@@ -186,7 +186,6 @@ it_match(struct itype *a, struct itype *b)
 {
 	if ((a->it_type != b->it_type) ||
 	    (a->it_size != b->it_size) ||
-	    (a->it_bits != b->it_bits) ||
 	    (a->it_nelems != b->it_nelems))
 		return 0;
 
@@ -397,7 +396,7 @@ insert_void(unsigned int i)
 	it->it_enc = CTF_INT_SIGNED;
 	it->it_type = CTF_K_INTEGER;
 	it->it_name = "void";
-	it->it_bits = 0;
+	it->it_size = 0;
 
 	return it;
 }
@@ -465,7 +464,7 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_enc = encoding;
 	it->it_type = type;
 	it->it_name = xstrdup(enc2name(enc));
-	it->it_bits = bits;
+	it->it_size = bits;
 
 	return it;
 }
@@ -476,7 +475,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 	struct itype *it;
 	struct dwaval *dav;
 	char *name = NULL;
-	uint64_t ref = 0, size = 0;
+	size_t ref = 0, size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
@@ -488,6 +487,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 			break;
 		case DW_AT_byte_size:
 			size = dav2val(dav, psz);
+			assert(size < UINT_MAX);
 			break;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
@@ -522,7 +522,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 	struct itype *it;
 	struct dwaval *dav;
 	char *name = NULL;
-	uint64_t ref = 0;
+	size_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
@@ -558,12 +558,13 @@ parse_enum(struct dwdie *die, size_t psz, unsigned int i)
 	struct itype *it;
 	struct dwaval *dav;
 	char *name = NULL;
-	uint64_t size = 0;
+	size_t size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_byte_size:
 			size = dav2val(dav, psz);
+			assert(size < UINT_MAX);
 			break;
 		case DW_AT_name:
 			name = xstrdup(dav2str(dav));
@@ -602,7 +603,7 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 	 */
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
 		uint64_t tag = die->die_dab->dab_tag;
-		uint64_t nelems = 0;
+		size_t nelems = 0;
 
 		if (tag != DW_TAG_subrange_type)
 			break;
@@ -622,6 +623,7 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 			}
 		}
 
+		assert(nelems < UINT_MAX);
 		it->it_nelems = nelems;
 	}
 }
@@ -632,12 +634,13 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 	struct itype *it;
 	struct dwaval *dav;
 	char *name = NULL;
-	uint64_t size = 0;
+	size_t size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_byte_size:
 			size = dav2val(dav, psz);
+			assert(size < UINT_MAX);
 			break;
 		case DW_AT_name:
 			name = xstrdup(dav2str(dav));
@@ -669,8 +672,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 	struct imember *im;
 	struct dwaval *dav;
 	const char *name = NULL;
-	uint64_t off = 0, ref = 0;
-	uint16_t bits;
+	size_t off = 0, ref = 0, bits = 0;
 
 	assert(it->it_type == CTF_K_STRUCT || it->it_type == CTF_K_UNION);
 
@@ -700,6 +702,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 				break;
 			case DW_AT_bit_size:
 				bits = dav2val(dav, psz);
+				assert(bits < USHRT_MAX);
 				break;
 			default:
 				DPRINTF("%s\n",
@@ -713,6 +716,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 		im->im_ref = ref;
 		im->im_name = name;
 
+		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
 	}
@@ -724,7 +728,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 {
 	struct imember *im;
 	struct dwaval *dav;
-	uint64_t ref = 0;
+	size_t ref = 0;
 
 	assert(it->it_type == CTF_K_FUNCTION);
 
@@ -773,6 +777,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 
 		im = xcalloc(1, sizeof(*im));
 		im->im_ref = ref;
+		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
 	}
@@ -784,7 +789,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 	struct itype *it;
 	struct dwaval *dav;
 	char *name = NULL;
-	uint64_t ref = 0;
+	size_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
@@ -834,7 +839,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 	struct itype *it;
 	struct dwaval *dav;
 	char *name = NULL;
-	uint64_t ref = 0;
+	size_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
@@ -870,7 +875,8 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 
 	return it;
 }
-uint64_t
+
+size_t
 dav2val(struct dwaval *dav, size_t psz)
 {
 	uint64_t val = (uint64_t)-1;

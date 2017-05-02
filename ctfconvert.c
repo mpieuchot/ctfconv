@@ -234,64 +234,64 @@ dump_type(struct itype *it)
 	switch (it->it_type) {
 	case CTF_K_FLOAT:
 	case CTF_K_INTEGER:
-		printf("  [%zd] %s %s encoding=%s offset=0 bits=%d\n",
+		printf("  [%u] %s %s encoding=%s offset=0 bits=%u\n",
 		    it->it_idx,
 		    (it->it_type == CTF_K_INTEGER) ? "INTEGER" : "FLOAT",
-		    it->it_name, ctf_enc2name(it->it_enc), it->it_bits);
+		    it->it_name, ctf_enc2name(it->it_enc), it->it_size);
 		break;
 	case CTF_K_POINTER:
-		printf("  <%zd> POINTER %s refers to %zd\n", it->it_idx,
+		printf("  <%u> POINTER %s refers to %u\n", it->it_idx,
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
 		    it->it_refp->it_idx);
 		break;
 	case CTF_K_TYPEDEF:
-		printf("  <%zd> TYPEDEF %s refers to %zd\n",
+		printf("  <%u> TYPEDEF %s refers to %u\n",
 		    it->it_idx, it->it_name, it->it_refp->it_idx);
 		break;
 	case CTF_K_VOLATILE:
-		printf("  <%zd> VOLATILE %s refers to %zd\n", it->it_idx,
+		printf("  <%u> VOLATILE %s refers to %u\n", it->it_idx,
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
 		    it->it_refp->it_idx);
 		break;
 	case CTF_K_CONST:
-		printf("  <%zd> CONST %s refers to %zd\n", it->it_idx,
+		printf("  <%u> CONST %s refers to %u\n", it->it_idx,
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
 		    it->it_refp->it_idx);
 		break;
 	case CTF_K_RESTRICT:
-		printf("  <%zd> RESTRICT %s refers to %zd\n", it->it_idx,
+		printf("  <%u> RESTRICT %s refers to %u\n", it->it_idx,
 		    it->it_name, it->it_refp->it_idx);
 		break;
 	case CTF_K_ARRAY:
-		printf("  [%zd] ARRAY %s content: %zd index: ?? nelems: %lld\n",
+		printf("  [%u] ARRAY %s content: %u index: ?? nelems: %u\n",
 		    it->it_idx, (it->it_name != NULL) ? it->it_name : "(anon)",
 		    it->it_refp->it_idx, it->it_nelems);
 		printf("\n");
 		break;
 	case CTF_K_STRUCT:
 	case CTF_K_UNION:
-		printf("  [%zd] %s %s (%lld bytes)\n", it->it_idx,
+		printf("  [%u] %s %s (%u bytes)\n", it->it_idx,
 		    (it->it_type == CTF_K_STRUCT) ? "STRUCT" : "UNION",
 		    (it->it_name != NULL) ? it->it_name : "(anon)",
 		    it->it_size);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
-			printf("\t%s type=%zd off=%zd\n",
+			printf("\t%s type=%u off=%zd\n",
 			    (im->im_name != NULL) ? im->im_name : "unknown",
 			    im->im_refp->it_idx, im->im_off);
 		}
 		printf("\n");
 		break;
 	case CTF_K_ENUM:
-		printf("  [%zd] ENUM %s\n", it->it_idx,
+		printf("  [%u] ENUM %s\n", it->it_idx,
 		    (it->it_name != NULL) ? it->it_name : "(anon)");
 		printf("\n");
 		break;
 	case CTF_K_FUNCTION:
-		printf("  [%zd] FUNCTION (%s) returns: %zd args: (",
+		printf("  [%u] FUNCTION (%s) returns: %u args: (",
 		    it->it_idx, (it->it_name != NULL) ? it->it_name : "anon",
 		    it->it_refp->it_idx);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
-			printf("%zd%s", im->im_refp->it_idx,
+			printf("%u%s", im->im_refp->it_idx,
 			    TAILQ_NEXT(im, im_next) ? ", " : "");
 		}
 		printf(")\n");
@@ -306,11 +306,11 @@ dump_func(struct itype *it)
 {
 	struct imember *im;
 
-	printf("  [%zd] FUNC (%s) returns: %zd args: (",
+	printf("  [%u] FUNC (%s) returns: %u args: (",
 	    it->it_idx,  (it->it_name != NULL) ? it->it_name : "unknown",
 	    it->it_refp->it_idx);
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
-		printf("%zd%s", im->im_refp->it_idx,
+		printf("%u%s", im->im_refp->it_idx,
 		    TAILQ_NEXT(im, im_next) ? ", " : "");
 	}
 	printf(")\n");
