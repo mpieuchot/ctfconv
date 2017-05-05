@@ -449,9 +449,30 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 		type = CTF_K_INTEGER;
 		break;
 	case DW_ATE_float:
+		if (bits < psz)
+			encoding = CTF_FP_SINGLE;
+		else if (bits == psz)
+			encoding = CTF_FP_DOUBLE;
+		else
+			encoding = CTF_FP_LDOUBLE;
+		type = CTF_K_FLOAT;
+		break;
 	case DW_ATE_complex_float:
+		if (bits < psz)
+			encoding = CTF_FP_CPLX;
+		else if (bits == psz)
+			encoding = CTF_FP_DCPLX;
+		else
+			encoding = CTF_FP_LDCPLX;
+		type = CTF_K_FLOAT;
+		break;
 	case DW_ATE_imaginary_float:
-		encoding = 0; /* FIXME */
+		if (bits < psz)
+			encoding = CTF_FP_IMAGRY;
+		else if (bits == psz)
+			encoding = CTF_FP_DIMAGRY;
+		else
+			encoding = CTF_FP_LDIMAGRY;
 		type = CTF_K_FLOAT;
 		break;
 	default:
