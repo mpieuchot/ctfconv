@@ -167,6 +167,8 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	size_t			 ctsz;
 	int			 kind, root, vlen;
 
+	assert(it->it_type != CTF_K_UNKNOWN && it->it_type != CTF_K_FORWARD);
+
 	/* Function pointers abuse it_nelems for # arguments. */
 	vlen = (it->it_type != CTF_K_FUNCTION) ? it->it_nelems : 0;
 	size = it->it_size;
@@ -193,6 +195,8 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	dbuf_copy(&imcs->body, &ctt, ctsz);
 
 	switch (kind) {
+		assert(1 == 0);
+		break;
 	case CTF_K_INTEGER:
 	case CTF_K_FLOAT:
 		eob = CTF_INT_DATA(it->it_enc, 0, size);
@@ -237,6 +241,17 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 			}
 		}
 		break;
+	case CTF_K_FUNCTION:
+		/* FIXME */
+		break;
+	case CTF_K_ENUM:
+		/* FIXME */
+		break;
+	case CTF_K_POINTER:
+	case CTF_K_TYPEDEF:
+	case CTF_K_VOLATILE:
+	case CTF_K_CONST:
+	case CTF_K_RESTRICT:
 	default:
 		break;
 	}
