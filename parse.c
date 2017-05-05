@@ -676,6 +676,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 	struct dwaval *dav;
 	const char *name = NULL;
 	size_t off = 0, ref = 0, bits = 0;
+	uint8_t lvl = die->die_lvl;
 
 	assert(it->it_type == CTF_K_STRUCT || it->it_type == CTF_K_UNION);
 
@@ -689,8 +690,12 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
 		uint64_t tag = die->die_dab->dab_tag;
 
-		if (tag != DW_TAG_member)
+		if (die->die_lvl <= lvl)
 			break;
+
+		/* Skip members of members */
+		if (die->die_lvl > lvl + 1)
+			continue;
 
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
