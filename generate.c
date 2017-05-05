@@ -187,7 +187,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	switch (kind) {
 	case CTF_K_INTEGER:
 	case CTF_K_FLOAT:
-		eob = 0; /* FIXME */
+		eob = CTF_INT_DATA(it->it_enc, 0, it->it_size);
 		dbuf_copy(&imcs->body, &eob, sizeof(eob));
 		break;
 	case CTF_K_ARRAY:
