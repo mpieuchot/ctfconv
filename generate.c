@@ -160,34 +160,42 @@ void
 imcs_add_type(struct imcs *imcs, struct itype *it)
 {
 	struct imember		*im;
-	struct ctf_stype	 cts;
+	struct ctf_type		 ctt;
 	struct ctf_array	 cta;
 	unsigned int		 eob;
 	uint32_t		 size;
+	size_t			 ctsz;
 	int			 kind, root, vlen;
 
-
+	/* Function pointers abuse it_nelems for # arguments. */
+	vlen = (it->it_type != CTF_K_FUNCTION) ? it->it_nelems : 0;
 	size = it->it_size;
 	kind = it->it_type;
 	root = 0;
-	/* Function pointers abuse it_nelems for # arguments. */
-	vlen = (kind != CTF_K_FUNCTION) ? it->it_nelems : 0;
 
-	cts.cts_name = imcs_add_string(imcs, it->it_name);
-	cts.cts_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
-	if (it->it_refp != NULL)
-		cts.cts_type = it->it_refp->it_idx;
-	else if (size > CTF_MAX_SIZE) /* FIXME */
-		warnx("%s: size > CTF_MAX_SIZE (%u)", it->it_name, size);
-	else
-		cts.cts_size = size;
+	ctt.ctt_name = imcs_add_string(imcs, it->it_name);
+	ctt.ctt_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 
-	dbuf_copy(&imcs->body, &cts, sizeof(cts));
+	/* Base types don't have reference, typedef & pointer don't have size */
+	if (it->it_refp != NULL) {
+		ctt.ctt_type = it->it_refp->it_idx;
+		ctsz = sizeof(struct ctf_stype);
+	} else if (size <= CTF_MAX_SIZE) {
+		ctt.ctt_size = size;
+		ctsz = sizeof(struct ctf_stype);
+	} else {
+		ctt.ctt_lsizehi = CTF_SIZE_TO_LSIZE_HI(size);
+		ctt.ctt_lsizelo = CTF_SIZE_TO_LSIZE_LO(size);
+		ctt.ctt_size = CTF_LSIZE_SENT;
+		ctsz = sizeof(struct ctf_type);
+	}
+
+	dbuf_copy(&imcs->body, &ctt, ctsz);
 
 	switch (kind) {
 	case CTF_K_INTEGER:
 	case CTF_K_FLOAT:
-		eob = CTF_INT_DATA(it->it_enc, 0, it->it_size);
+		eob = CTF_INT_DATA(it->it_enc, 0, size);
 		dbuf_copy(&imcs->body, &eob, sizeof(eob));
 		break;
 	case CTF_K_ARRAY:
@@ -216,7 +224,11 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 				ctlm.ctlm_name =
 				    imcs_add_string(imcs, im->im_name);
 				ctlm.ctlm_type = im->im_refp->it_idx;
-				ctlm.ctlm_offsetlo = im->im_off; /* FIXME */
+				ctlm.ctlm_offsethi =
+				    CTF_OFFSET_TO_LMEMHI(im->im_off);
+				ctlm.ctlm_offsetlo =
+				    CTF_OFFSET_TO_LMEMLO(im->im_off);
+
 
 				dbuf_copy(&imcs->body, &ctlm, sizeof(ctlm));
 			}
