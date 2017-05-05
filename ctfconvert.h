@@ -62,3 +62,4 @@ struct imember {
 TAILQ_HEAD(itype_queue, itype);
 
 extern struct itype_queue itypeq;	/* Global queue of internal types */
+extern uint16_t long_tidx;

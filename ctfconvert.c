@@ -264,9 +264,9 @@ dump_type(struct itype *it)
 		    it->it_name, it->it_refp->it_idx);
 		break;
 	case CTF_K_ARRAY:
-		printf("  [%u] ARRAY %s content: %u index: ?? nelems: %u\n",
+		printf("  [%u] ARRAY %s content: %u index: %u nelems: %u\n",
 		    it->it_idx, (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refp->it_idx, it->it_nelems);
+		    it->it_refp->it_idx, long_tidx, it->it_nelems);
 		printf("\n");
 		break;
 	case CTF_K_STRUCT:

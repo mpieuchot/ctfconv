@@ -177,7 +177,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	ctt.ctt_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 
 	/* Base types don't have reference, typedef & pointer don't have size */
-	if (it->it_refp != NULL) {
+	if (it->it_refp != NULL && kind != CTF_K_ARRAY) {
 		ctt.ctt_type = it->it_refp->it_idx;
 		ctsz = sizeof(struct ctf_stype);
 	} else if (size <= CTF_MAX_SIZE) {
@@ -200,6 +200,9 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 		break;
 	case CTF_K_ARRAY:
 		memset(&cta, 0, sizeof(cta));
+		cta.cta_contents = it->it_refp->it_idx;
+		cta.cta_index = long_tidx;
+		cta.cta_nelems = it->it_nelems;
 		dbuf_copy(&imcs->body, &cta, sizeof(cta));
 		break;
 	case CTF_K_STRUCT:

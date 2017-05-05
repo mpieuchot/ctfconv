@@ -65,6 +65,7 @@ int		 it_cmp(struct itype *, struct itype *);
 RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
 struct itype			*void_it;
 uint16_t			 tidx, fidx;	/* type and function indexes */
+uint16_t			 long_tidx;	/* index of 'long', for array */
 
 
 RB_GENERATE(itype_tree, itype, it_node, it_cmp);
@@ -83,6 +84,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	struct dwbuf		 abbrev = { .buf = abbuf, .len = ablen };
 	struct dwcu		*dcu = NULL;
 	struct itype_queue	*itypeq;
+	struct itype		*it;
 	int			 i;
 
 	itypeq = xcalloc(1, sizeof(*itypeq));
@@ -98,7 +100,6 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
 		struct itype_queue	 cu_itypeq;
-		struct itype		*it;
 
 		TAILQ_INIT(&cu_itypeq);
 
@@ -113,6 +114,17 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		merge(itypeq, &cu_itypeq);
 
 		dw_dcu_free(dcu);
+	}
+
+	/* Find type "long" */
+	RB_FOREACH(it, itype_tree, &itypet[CTF_K_INTEGER]) {
+		if (it->it_name == NULL || it->it_size != (8 * sizeof(long)))
+			continue;
+
+		if (strcmp(it->it_name, "unsigned") == 0) {
+			long_tidx = it->it_idx;
+			break;
+		}
 	}
 
 	return itypeq;
