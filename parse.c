@@ -49,7 +49,7 @@ struct itype	*parse_refers(struct dwdie *, size_t, unsigned int, int);
 struct itype	*parse_array(struct dwdie *, size_t, unsigned int);
 struct itype	*parse_enum(struct dwdie *, size_t, unsigned int);
 struct itype	*parse_struct(struct dwdie *, size_t, unsigned int, int);
-struct itype	*parse_function(struct dwdie *, size_t, unsigned int);
+struct itype	*parse_function(struct dwdie *, size_t);
 struct itype	*parse_funcptr(struct dwdie *, size_t, unsigned int);
 
 void		 subparse_subrange(struct dwdie *, size_t, struct itype *);
@@ -88,8 +88,6 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	for (i = 0; i < CTF_K_MAX; i++)
 		RB_INIT(&itypet[i]);
-
-	tidx = fidx = 0;
 
 	void_it = insert_void(++tidx);
 	TAILQ_INSERT_TAIL(&itypeq, void_it, it_next);
@@ -339,7 +337,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			it = parse_refers(die, psz, ++tidx, CTF_K_RESTRICT);
 			break;
 		case DW_TAG_subprogram:
-			it = parse_function(die, psz, fidx++);
+			it = parse_function(die, psz);
 			if (it == NULL)
 				continue;
 			break;
@@ -817,7 +815,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 }
 
 struct itype *
-parse_function(struct dwdie *die, size_t psz, unsigned int i)
+parse_function(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -850,7 +848,7 @@ parse_function(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_flags = ITF_UNRESOLVED|ITF_FUNCTION;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;		/* return type */
-	it->it_idx = i;
+	it->it_idx = ++fidx;
 	it->it_type = CTF_K_FUNCTION;
 	it->it_name = name;
 
