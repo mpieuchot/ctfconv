@@ -41,7 +41,7 @@
 
 void		 parse_cu(struct dwcu *, struct itype_queue *);
 void		 resolve(struct itype *, struct itype_queue *, size_t);
-void		 merge(struct itype_queue *, struct itype_queue *);
+void		 merge(struct itype_queue *);
 
 struct itype	*insert_void(unsigned int);
 struct itype	*parse_base(struct dwdie *, size_t);
@@ -105,7 +105,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 			resolve(it, &cu_itypeq, dcu->dcu_offset);
 
 		/* Merge them with the common type list. */
-		merge(&itypeq, &cu_itypeq);
+		merge(&cu_itypeq);
 
 		dw_dcu_free(dcu);
 	}
@@ -225,16 +225,16 @@ it_cmp(struct itype *a, struct itype *b)
  *
  * This algorithm is in O(n*(m+n)) with:
  *   n = number of elements in ``otherq''
- *   m = number of elements in ``itypeq''
+ *   m = number of elements in ``&itypeq''
  */
 void
-merge(struct itype_queue *itypeq, struct itype_queue *otherq)
+merge(struct itype_queue *otherq)
 {
 	struct itype *it, *nit;
 	struct itype *prev, *last;
 
 	/* Remember last of the existing types. */
-	last = TAILQ_LAST(itypeq, itype_queue);
+	last = TAILQ_LAST(&itypeq, itype_queue);
 	if (last == NULL)
 		return;
 
@@ -243,7 +243,7 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 	if (it == NULL)
 		return;
 
-	TAILQ_CONCAT(itypeq, otherq, it_next);
+	TAILQ_CONCAT(&itypeq, otherq, it_next);
 
 	for (; it != NULL; it = nit) {
 		nit = TAILQ_NEXT(it, it_next);
@@ -258,7 +258,7 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 			struct itype *old = it;
 
 			/* Remove duplicate */
-			TAILQ_REMOVE(itypeq, it, it_next);
+			TAILQ_REMOVE(&itypeq, it, it_next);
 
 			it = TAILQ_NEXT(last, it_next);
 			while (it != NULL) {
@@ -288,7 +288,7 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 	}
 
 	/* Update global index to match removed entries. */
-	it = TAILQ_LAST(itypeq, itype_queue);
+	it = TAILQ_LAST(&itypeq, itype_queue);
 	while (it != NULL && (it->it_flags & ITF_FUNCTION))
 		it = TAILQ_PREV(it, itype_queue, it_next);
 
