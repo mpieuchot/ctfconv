@@ -296,12 +296,8 @@ imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 	 * Insert functions
 	 */
 	cth->cth_funcoff = dbuf_pad(&imcs->body, 2);
-	TAILQ_FOREACH(it, &itypeq, it_next) {
-		if (!(it->it_flags & ITF_FUNCTION))
-			continue;
-
+	TAILQ_FOREACH(it, &ifuncq, it_fnext)
 		imcs_add_func(imcs, it);
-	}
 
 	/*
 	 * Insert types

@@ -65,7 +65,7 @@ int		 it_cmp(struct itype *, struct itype *);
 RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
 struct itype			*void_it;
 uint16_t			 tidx, fidx;	/* type and function indexes */
-uint16_t			 long_tidx;	/* index of 'long', for array */
+uint16_t			 long_tidx;	/* index of "long", for array */
 
 
 RB_GENERATE(itype_tree, itype, it_node, it_cmp);
@@ -248,9 +248,11 @@ merge(struct itype_queue *otherq)
 	for (; it != NULL; it = nit) {
 		nit = TAILQ_NEXT(it, it_next);
 
-		/* We're looking for duplicated type only. */
-		if (it->it_flags & ITF_FUNCTION)
+		/* Move functions to their own list. */
+		if (it->it_flags & ITF_FUNCTION) {
+			TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
 			continue;
+		}
 
 		/* Look if we already have this type. */
 		prev = RB_FIND(itype_tree, &itypet[it->it_type], it);

@@ -63,8 +63,9 @@ void		 dwarf_parse(const char *, size_t, const char *, size_t);
 
 const char	*ctf_enc2name(unsigned short);
 
-/* list of parsed types and functions */
+/* lists of parsed types and functions */
 struct itype_queue itypeq = TAILQ_HEAD_INITIALIZER(itypeq);
+struct itype_queue ifuncq = TAILQ_HEAD_INITIALIZER(ifuncq);
 
 __dead void
 usage(void)
@@ -116,12 +117,8 @@ main(int argc, char *argv[])
 		return error;
 
 	if (dump) {
-		TAILQ_FOREACH(it, &itypeq, it_next) {
-			if (!(it->it_flags & ITF_FUNCTION))
-				continue;
-
+		TAILQ_FOREACH(it, &ifuncq, it_fnext)
 			dump_func(it);
-		}
 		printf("\n");
 		TAILQ_FOREACH(it, &itypeq, it_next) {
 			if (it->it_flags & ITF_FUNCTION)

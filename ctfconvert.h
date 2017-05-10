@@ -25,6 +25,7 @@ struct imember;
  */
 struct itype {
 	TAILQ_ENTRY(itype)	 it_next;   /* itype: global queue of types */
+	TAILQ_ENTRY(itype)	 it_fnext;  /* itype: global queue of funcs */
 	RB_ENTRY(itype)		 it_node;   /* itype: per-type tree of types */
 	TAILQ_HEAD(, imember)	 it_members;
 
@@ -61,5 +62,5 @@ struct imember {
 
 TAILQ_HEAD(itype_queue, itype);
 
-extern struct itype_queue itypeq;	/* Global queue of internal types */
-extern uint16_t long_tidx;
+extern struct itype_queue itypeq, ifuncq;   /* lists of types & functions */
+extern uint16_t long_tidx;		    /* type ID for "long" */
