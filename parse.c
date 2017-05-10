@@ -76,19 +76,15 @@ RB_GENERATE(itype_tree, itype, it_node, it_cmp);
  *
  * Multiple CUs are supported.
  */
-struct itype_queue *
+void
 dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
     size_t ablen)
 {
 	struct dwbuf		 info = { .buf = infobuf, .len = infolen };
 	struct dwbuf		 abbrev = { .buf = abbuf, .len = ablen };
 	struct dwcu		*dcu = NULL;
-	struct itype_queue	*itypeq;
 	struct itype		*it;
 	int			 i;
-
-	itypeq = xcalloc(1, sizeof(*itypeq));
-	TAILQ_INIT(itypeq);
 
 	for (i = 0; i < CTF_K_MAX; i++)
 		RB_INIT(&itypet[i]);
@@ -96,7 +92,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	tidx = fidx = 0;
 
 	void_it = insert_void(++tidx);
-	TAILQ_INSERT_TAIL(itypeq, void_it, it_next);
+	TAILQ_INSERT_TAIL(&itypeq, void_it, it_next);
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
 		struct itype_queue	 cu_itypeq;
@@ -111,7 +107,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 			resolve(it, &cu_itypeq, dcu->dcu_offset);
 
 		/* Merge them with the common type list. */
-		merge(itypeq, &cu_itypeq);
+		merge(&itypeq, &cu_itypeq);
 
 		dw_dcu_free(dcu);
 	}
@@ -126,8 +122,6 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 			break;
 		}
 	}
-
-	return itypeq;
 }
 
 /*

@@ -59,7 +59,7 @@ ssize_t		 elf_getsection(char *, const char *, const char *,
 		     size_t, const char **, size_t *);
 
 /* parse.c */
-struct itype_queue *dwarf_parse(const char *, size_t, const char *, size_t);
+void		 dwarf_parse(const char *, size_t, const char *, size_t);
 
 const char	*ctf_enc2name(unsigned short);
 
@@ -184,7 +184,6 @@ elf_convert(char *p, size_t filesize)
 	const char		*infobuf, *abbuf;
 	size_t			 infolen, ablen;
 	size_t			 shstabsz;
-	struct itype_queue	*file_typeq;
 
 	/* Find section header string table location and size. */
 	if (elf_getshstab(p, filesize, &shstab, &shstabsz))
@@ -208,13 +207,7 @@ elf_convert(char *p, size_t filesize)
 	    &dstrlen) == -1)
 		warnx("%s section not found", DEBUG_STR);
 
-	file_typeq = dwarf_parse(infobuf, infolen, abbuf, ablen);
-	if (file_typeq == NULL)
-		return 1;
-
-	TAILQ_CONCAT(&itypeq, file_typeq, it_next);
-
-	free(file_typeq);
+	dwarf_parse(infobuf, infolen, abbuf, ablen);
 
 	return 0;
 }
