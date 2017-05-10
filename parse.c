@@ -44,13 +44,13 @@ void		 resolve(struct itype *, struct itype_queue *, size_t);
 void		 merge(struct itype_queue *, struct itype_queue *);
 
 struct itype	*insert_void(unsigned int);
-struct itype	*parse_base(struct dwdie *, size_t, unsigned int);
-struct itype	*parse_refers(struct dwdie *, size_t, unsigned int, int);
-struct itype	*parse_array(struct dwdie *, size_t, unsigned int);
-struct itype	*parse_enum(struct dwdie *, size_t, unsigned int);
-struct itype	*parse_struct(struct dwdie *, size_t, unsigned int, int);
+struct itype	*parse_base(struct dwdie *, size_t);
+struct itype	*parse_refers(struct dwdie *, size_t, int);
+struct itype	*parse_array(struct dwdie *, size_t);
+struct itype	*parse_enum(struct dwdie *, size_t);
+struct itype	*parse_struct(struct dwdie *, size_t, int);
 struct itype	*parse_function(struct dwdie *, size_t);
-struct itype	*parse_funcptr(struct dwdie *, size_t, unsigned int);
+struct itype	*parse_funcptr(struct dwdie *, size_t);
 
 void		 subparse_subrange(struct dwdie *, size_t, struct itype *);
 void		 subparse_member(struct dwdie *, size_t, struct itype *);
@@ -307,34 +307,34 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 
 		switch (tag) {
 		case DW_TAG_array_type:
-			it = parse_array(die, dcu->dcu_psize, ++tidx);
+			it = parse_array(die, dcu->dcu_psize);
 			break;
 		case DW_TAG_enumeration_type:
-			it = parse_enum(die, dcu->dcu_psize, ++tidx);
+			it = parse_enum(die, dcu->dcu_psize);
 			break;
 		case DW_TAG_pointer_type:
-			it = parse_refers(die, psz, ++tidx, CTF_K_POINTER);
+			it = parse_refers(die, psz, CTF_K_POINTER);
 			break;
 		case DW_TAG_structure_type:
-			it = parse_struct(die, psz, ++tidx, CTF_K_STRUCT);
+			it = parse_struct(die, psz, CTF_K_STRUCT);
 			break;
 		case DW_TAG_typedef:
-			it = parse_refers(die, psz, ++tidx, CTF_K_TYPEDEF);
+			it = parse_refers(die, psz, CTF_K_TYPEDEF);
 			break;
 		case DW_TAG_union_type:
-			it = parse_struct(die, psz, ++tidx, CTF_K_UNION);
+			it = parse_struct(die, psz, CTF_K_UNION);
 			break;
 		case DW_TAG_base_type:
-			it = parse_base(die, psz, ++tidx);
+			it = parse_base(die, psz);
 			break;
 		case DW_TAG_const_type:
-			it = parse_refers(die, psz, ++tidx, CTF_K_CONST);
+			it = parse_refers(die, psz, CTF_K_CONST);
 			break;
 		case DW_TAG_volatile_type:
-			it = parse_refers(die, psz, ++tidx, CTF_K_VOLATILE);
+			it = parse_refers(die, psz, CTF_K_VOLATILE);
 			break;
 		case DW_TAG_restrict_type:
-			it = parse_refers(die, psz, ++tidx, CTF_K_RESTRICT);
+			it = parse_refers(die, psz, CTF_K_RESTRICT);
 			break;
 		case DW_TAG_subprogram:
 			it = parse_function(die, psz);
@@ -342,7 +342,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 				continue;
 			break;
 		case DW_TAG_subroutine_type:
-			it = parse_funcptr(die, psz, ++tidx);
+			it = parse_funcptr(die, psz);
 			break;
 		/*
 		 * Children are assumed to be right after their parent in
@@ -409,7 +409,7 @@ insert_void(unsigned int i)
 }
 
 struct itype *
-parse_base(struct dwdie *die, size_t psz, unsigned int i)
+parse_base(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -488,7 +488,7 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = 0; /* Do not need to be resolved. */
 	it->it_off = die->die_offset;
-	it->it_idx = i;
+	it->it_idx = ++tidx;
 	it->it_enc = encoding;
 	it->it_type = type;
 	it->it_name = xstrdup(enc2name(enc));
@@ -498,7 +498,7 @@ parse_base(struct dwdie *die, size_t psz, unsigned int i)
 }
 
 struct itype *
-parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
+parse_refers(struct dwdie *die, size_t psz, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -528,7 +528,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;
-	it->it_idx = i;
+	it->it_idx = ++tidx;
 	it->it_size = size;
 	it->it_type = type;
 	it->it_name = name;
@@ -545,7 +545,7 @@ parse_refers(struct dwdie *die, size_t psz, unsigned int i, int type)
 }
 
 struct itype *
-parse_array(struct dwdie *die, size_t psz, unsigned int i)
+parse_array(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -571,7 +571,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;
-	it->it_idx = i;
+	it->it_idx = ++tidx;
 	it->it_type = CTF_K_ARRAY;
 	it->it_name = name;
 
@@ -581,7 +581,7 @@ parse_array(struct dwdie *die, size_t psz, unsigned int i)
 }
 
 struct itype *
-parse_enum(struct dwdie *die, size_t psz, unsigned int i)
+parse_enum(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -607,7 +607,7 @@ parse_enum(struct dwdie *die, size_t psz, unsigned int i)
 	TAILQ_INIT(&it->it_members);
 	it->it_off = die->die_offset;
 	it->it_ref = 0;
-	it->it_idx = i;
+	it->it_idx = ++tidx;
 	it->it_size = size;
 	it->it_type = CTF_K_ENUM;
 	it->it_name = name;
@@ -657,7 +657,7 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 }
 
 struct itype *
-parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
+parse_struct(struct dwdie *die, size_t psz, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -684,7 +684,7 @@ parse_struct(struct dwdie *die, size_t psz, unsigned int i, int type)
 	it->it_flags = ITF_UNRESOLVED_MEMBERS;
 	it->it_off = die->die_offset;
 	it->it_ref = 0;
-	it->it_idx = i;
+	it->it_idx = ++tidx;
 	it->it_size = size;
 	it->it_type = type;
 	it->it_name = name;
@@ -865,7 +865,7 @@ parse_function(struct dwdie *die, size_t psz)
 }
 
 struct itype *
-parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
+parse_funcptr(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
@@ -891,7 +891,7 @@ parse_funcptr(struct dwdie *die, size_t psz, unsigned int i)
 	it->it_flags = ITF_UNRESOLVED;
 	it->it_off = die->die_offset;
 	it->it_ref = ref;
-	it->it_idx = i;
+	it->it_idx = ++tidx;
 	it->it_type = CTF_K_FUNCTION;
 	it->it_name = name;
 
