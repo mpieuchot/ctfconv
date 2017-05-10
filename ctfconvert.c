@@ -78,17 +78,14 @@ int
 main(int argc, char *argv[])
 {
 	const char *filename, *label = NULL, *outfile = NULL;
-	int dump = 0, compress = 0;
+	int dump = 0;
 	int ch, error = 0;
 	struct itype *it;
 
 	setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "cdl:o:")) != -1) {
+	while ((ch = getopt(argc, argv, "dl:o:")) != -1) {
 		switch (ch) {
-		case 'c':
-			compress = 1;
-			break;
 		case 'd':
 			dump = 1;	/* ctfdump(1) like SUNW_ctf sections */
 			break;
@@ -110,14 +107,13 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc <= 0 || label == NULL)
+	if (argc != 1 || label == NULL)
 		usage();
 
-	while ((filename = *argv++) != NULL) {
-		error = convert(filename);
-		if (error != 0)
-			return error;
-	}
+	filename = *argv;
+	error = convert(filename);
+	if (error != 0)
+		return error;
 
 	if (dump) {
 		TAILQ_FOREACH(it, &itypeq, it_next) {
@@ -136,7 +132,7 @@ main(int argc, char *argv[])
 	}
 
 	if (outfile != NULL) {
-		error = generate(outfile, label, compress);
+		error = generate(outfile, label, 1);
 		if (error != 0)
 			return error;
 	}
