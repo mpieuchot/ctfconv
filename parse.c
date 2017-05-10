@@ -274,7 +274,8 @@ merge(struct itype_queue *itypeq, struct itype_queue *otherq)
 				}
 
 				/* Adjust indexes, assume newidx < oldidx */
-				if (it->it_idx > old->it_idx)
+				if (!(it->it_flags & ITF_FUNCTION) &&
+				    (it->it_idx > old->it_idx))
 					it->it_idx--;
 
 				it = TAILQ_NEXT(it, it_next);
