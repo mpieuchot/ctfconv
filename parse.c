@@ -721,8 +721,6 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 	 * after it on the list.
 	 */
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
-		uint64_t tag = die->die_dab->dab_tag;
-
 		if (die->die_lvl <= lvl)
 			break;
 

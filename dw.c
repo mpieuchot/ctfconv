@@ -387,7 +387,6 @@ dw_die_parse(struct dwbuf *dwbuf, size_t nextoff, uint8_t psz,
     struct dwabbrev_queue *dabq, struct dwdie_queue *dieq)
 {
 	struct dwdie	*die;
-	struct dwaval	*dav;
 	struct dwabbrev	*dab;
 	struct dwattr	*dat;
 	uint64_t	 code;

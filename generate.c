@@ -82,7 +82,7 @@ dbuf_realloc(struct dbuf *dbuf, size_t len)
 void
 dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 {
-	off_t coff, left;
+	off_t left;
 
 	assert(dbuf->cptr != NULL);
 	assert(dbuf->data != NULL);
@@ -92,7 +92,7 @@ dbuf_copy(struct dbuf *dbuf, void const *data, size_t len)
 		return;
 
 	left = dbuf->size - dbuf->coff;
-	if (left < len)
+	if (left < (off_t)len)
 		dbuf_realloc(dbuf, ROUNDUP((len - left), DBUF_CHUNKSZ));
 
 	memcpy(dbuf->cptr, data, len);
@@ -138,11 +138,10 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 	unsigned short		 func, arg;
 	struct imember		*im;
 	int			 kind, root, vlen;
-	int			 i;
 
+	vlen = it->it_nelems;
 	kind = it->it_type;
 	root = 0;
-	vlen = it->it_nelems;
 
 	func = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 	dbuf_copy(&imcs->body, &func, sizeof(func));
@@ -327,7 +326,7 @@ int
 generate(const char *path, const char *label, int compress)
 {
 	char			*p, *ctfdata = NULL;
-	size_t			 ctflen;
+	ssize_t			 ctflen;
 	struct ctf_header	 cth;
 	struct imcs		 imcs;
 	int			 error, fd;
@@ -386,7 +385,7 @@ generate(const char *path, const char *label, int compress)
 	}
 
 	if (write(fd, ctfdata, ctflen) != ctflen) {
-		warn("unable to write %zu bytes for %s", ctflen, path);
+		warn("unable to write %zd bytes for %s", ctflen, path);
 		error = -1;
 	}
 

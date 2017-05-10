@@ -180,12 +180,10 @@ size_t			 dstrlen;
 int
 elf_convert(char *p, size_t filesize)
 {
-	Elf_Ehdr		*eh = (Elf_Ehdr *)p;
-	Elf_Shdr		*sh;
 	const char		*shstab;
 	const char		*infobuf, *abbuf;
 	size_t			 infolen, ablen;
-	size_t			 i, shstabsz;
+	size_t			 shstabsz;
 	struct itype_queue	*file_typeq;
 
 	/* Find section header string table location and size. */
