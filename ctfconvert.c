@@ -110,7 +110,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc <= 0)
+	if (argc <= 0 || label == NULL)
 		usage();
 
 	while ((filename = *argv++) != NULL) {
