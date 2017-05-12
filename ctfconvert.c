@@ -34,6 +34,7 @@
 #include <unistd.h>
 
 #include "ctfconvert.h"
+#include "xmalloc.h"
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
@@ -50,7 +51,7 @@ int		 generate(const char *, const char *, int);
 int		 elf_convert(char *, size_t);
 void		 elf_sort(void);
 void		 dump_type(struct itype *);
-void		 dump_func(struct itype *);
+void		 dump_func(struct itype *, int *);
 
 /* elf.c */
 int		 iself(const char *, size_t);
@@ -119,8 +120,10 @@ main(int argc, char *argv[])
 		return error;
 
 	if (dump) {
+		int fidx = -1;
+
 		TAILQ_FOREACH(it, &ifuncq, it_fnext)
-			dump_func(it);
+			dump_func(it, &fidx);
 		printf("\n");
 		TAILQ_FOREACH(it, &itypeq, it_next) {
 			if (it->it_flags & ITF_FUNCTION)
@@ -232,39 +235,47 @@ elf_sort(void)
 	struct itype_queue	 otherq;
 	struct itype		*it, tmp;
 	size_t			 i;
-	uint16_t		 fidx;
 
 	TAILQ_INIT(&otherq);
 	TAILQ_CONCAT(&otherq, &ifuncq, it_fnext);
 	TAILQ_INIT(&ifuncq);
 
 	memset(&tmp, 0, sizeof(tmp));
-	fidx = 0;
 	for (i = 0; i < nsymb; i++) {
 		const Elf_Sym	*st = &symtab[i];
+
+		if (st->st_shndx == SHN_UNDEF || st->st_shndx == SHN_COMMON)
+			continue;
 
 		if (ELF_ST_TYPE(st->st_info) != STT_FUNC)
 			continue;
 
 		tmp.it_name = (char *)(strtab + st->st_name);
 		it = RB_FIND(isymb_tree, &isymbt, &tmp);
-		if (it != NULL) {
-			TAILQ_REMOVE(&otherq, it, it_fnext);
-			TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
-			it->it_idx = fidx++;
-		}
-
-#if DEBUG
-		if (it == NULL)
+		if (it == NULL) {
+			/* Insert 'unknown' entry to match symbol order. */
+			it = xcalloc(1, sizeof(*it));
+			TAILQ_INIT(&it->it_members);
+			it->it_nelems = 0;
+			it->it_type = CTF_K_UNKNOWN;
+			it->it_refp = it;
+#ifdef DEBUG
 			warnx("symbol not found: %s", strtab + st->st_name);
 #endif
+		} else {
+			TAILQ_REMOVE(&otherq, it, it_fnext);
+		}
+
+		TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
 	}
 
-#if DEBUG
+#ifdef DEBUG
 	if (!TAILQ_EMPTY(&otherq)) {
+		int fidx = -1;
+
 		warnx("skiping some function declarations");
 		TAILQ_FOREACH(it, &otherq, it_fnext)
-			dump_func(it);
+			dump_func(it, &fidx);
 	}
 #endif
 }
@@ -346,12 +357,17 @@ dump_type(struct itype *it)
 }
 
 void
-dump_func(struct itype *it)
+dump_func(struct itype *it, int *idx)
 {
 	struct imember *im;
 
-	printf("  [%u] FUNC (%s) returns: %u args: (",
-	    it->it_idx,  (it->it_name != NULL) ? it->it_name : "unknown",
+	(*idx)++;
+
+	if (it->it_type == CTF_K_UNKNOWN && it->it_nelems == 0)
+		return;
+
+	printf("  [%u] FUNC (%s) returns: %u args: (", (*idx),
+	    (it->it_name != NULL) ? it->it_name : "unknown",
 	    it->it_refp->it_idx);
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
 		printf("%u%s", im->im_refp->it_idx,

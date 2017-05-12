@@ -146,6 +146,9 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 	func = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 	dbuf_copy(&imcs->body, &func, sizeof(func));
 
+	if (kind == CTF_K_UNKNOWN)
+		return;
+
 	func = it->it_refp->it_idx;
 	dbuf_copy(&imcs->body, &func, sizeof(func));
 
