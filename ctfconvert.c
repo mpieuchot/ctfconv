@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "ctfconvert.h"
@@ -47,6 +48,7 @@ __dead void	 usage(void);
 int		 convert(const char *);
 int		 generate(const char *, const char *, int);
 int		 elf_convert(char *, size_t);
+void		 elf_sort(void);
 void		 dump_type(struct itype *);
 void		 dump_func(struct itype *);
 
@@ -173,6 +175,9 @@ convert(const char *path)
 
 const char		*dstrbuf;
 size_t			 dstrlen;
+const char		*strtab;
+const Elf_Sym		*symtab;
+size_t			 strtabsz, nsymb;
 
 int
 elf_convert(char *p, size_t filesize)
@@ -185,6 +190,15 @@ elf_convert(char *p, size_t filesize)
 	/* Find section header string table location and size. */
 	if (elf_getshstab(p, filesize, &shstab, &shstabsz))
 		return 1;
+
+	/* Find symbol table location and number of symbols. */
+	if (elf_getsymtab(p, shstab, shstabsz, &symtab, &nsymb) == -1)
+		warnx("symbol table not found");
+
+	/* Find string table location and size. */
+	if (elf_getsection(p, ELF_STRTAB, shstab, shstabsz, &strtab,
+	    &strtabsz) == -1)
+		warnx("string table not found");
 
 	/* Find abbreviation location and size. */
 	if (elf_getsection(p, DEBUG_ABBREV, shstab, shstabsz, &abbuf,
@@ -206,9 +220,55 @@ elf_convert(char *p, size_t filesize)
 
 	dwarf_parse(infobuf, infolen, abbuf, ablen);
 
+	/* Sort functions */
+	elf_sort();
+
 	return 0;
 }
 
+void
+elf_sort(void)
+{
+	struct itype_queue	 otherq;
+	struct itype		*it;
+	size_t			 i;
+	uint16_t		 fidx;
+
+	TAILQ_INIT(&otherq);
+	TAILQ_CONCAT(&otherq, &ifuncq, it_fnext);
+	TAILQ_INIT(&ifuncq);
+
+	fidx = 0;
+	for (i = 0; i < nsymb; i++) {
+		const Elf_Sym	*st = &symtab[i];
+
+		if (ELF_ST_TYPE(st->st_info) != STT_FUNC)
+			continue;
+
+		TAILQ_FOREACH(it, &otherq, it_fnext) {
+			if (strcmp(it->it_name, strtab + st->st_name))
+				continue;
+
+			TAILQ_REMOVE(&otherq, it, it_fnext);
+			TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
+			it->it_idx = fidx++;
+			break;
+		}
+
+#if DEBUG
+		if (it == NULL)
+			warnx("symbol not found: %s", strtab + st->st_name);
+#endif
+	}
+
+#if DEBUG
+	if (!TAILQ_EMPTY(&otherq)) {
+		warnx("skiping some function declarations");
+		TAILQ_FOREACH(it, &otherq, it_fnext)
+			dump_func(it);
+	}
+#endif
+}
 
 /* Display parsed types a la ctfdump(1) */
 void
