@@ -61,14 +61,17 @@ const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
 int		 it_cmp(struct itype *, struct itype *);
+int		 it_name_cmp(struct itype *, struct itype *);
 
 RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
+struct isymb_tree		 isymbt;
 struct itype			*void_it;
 uint16_t			 tidx, fidx;	/* type and function indexes */
 uint16_t			 long_tidx;	/* index of "long", for array */
 
 
 RB_GENERATE(itype_tree, itype, it_node, it_cmp);
+RB_GENERATE(isymb_tree, itype, it_node, it_name_cmp);
 
 /*
  * Construct a list of internal type and functions based on DWARF
@@ -83,18 +86,18 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	struct dwbuf		 info = { .buf = infobuf, .len = infolen };
 	struct dwbuf		 abbrev = { .buf = abbuf, .len = ablen };
 	struct dwcu		*dcu = NULL;
+	struct itype_queue	 cu_itypeq;
 	struct itype		*it;
 	int			 i;
 
 	for (i = 0; i < CTF_K_MAX; i++)
 		RB_INIT(&itypet[i]);
+	RB_INIT(&isymbt);
 
 	void_it = insert_void(++tidx);
 	TAILQ_INSERT_TAIL(&itypeq, void_it, it_next);
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
-		struct itype_queue	 cu_itypeq;
-
 		TAILQ_INIT(&cu_itypeq);
 
 		/* Parse this CU */
@@ -220,6 +223,12 @@ it_cmp(struct itype *a, struct itype *b)
 	return 1;
 }
 
+int
+it_name_cmp(struct itype *a, struct itype *b)
+{
+	return strcmp(a->it_name, b->it_name);
+}
+
 /*
  * Merge type representation from a CU with already known types.
  *
@@ -251,6 +260,7 @@ merge(struct itype_queue *otherq)
 		/* Move functions to their own list. */
 		if (it->it_flags & ITF_FUNCTION) {
 			TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
+			RB_INSERT(isymb_tree, &isymbt, it);
 			continue;
 		}
 

@@ -61,6 +61,10 @@ struct imember {
 };
 
 TAILQ_HEAD(itype_queue, itype);
+RB_HEAD(isymb_tree, itype);
 
 extern struct itype_queue itypeq, ifuncq;   /* lists of types & functions */
+extern struct isymb_tree isymbt;	    /* tree of symbols */
 extern uint16_t long_tidx;		    /* type ID for "long" */
+
+RB_PROTOTYPE(isymb_tree, itype, it_node, it_name_cmp);

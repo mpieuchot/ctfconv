@@ -230,7 +230,7 @@ void
 elf_sort(void)
 {
 	struct itype_queue	 otherq;
-	struct itype		*it;
+	struct itype		*it, tmp;
 	size_t			 i;
 	uint16_t		 fidx;
 
@@ -238,6 +238,7 @@ elf_sort(void)
 	TAILQ_CONCAT(&otherq, &ifuncq, it_fnext);
 	TAILQ_INIT(&ifuncq);
 
+	memset(&tmp, 0, sizeof(tmp));
 	fidx = 0;
 	for (i = 0; i < nsymb; i++) {
 		const Elf_Sym	*st = &symtab[i];
@@ -245,14 +246,12 @@ elf_sort(void)
 		if (ELF_ST_TYPE(st->st_info) != STT_FUNC)
 			continue;
 
-		TAILQ_FOREACH(it, &otherq, it_fnext) {
-			if (strcmp(it->it_name, strtab + st->st_name))
-				continue;
-
+		tmp.it_name = (char *)(strtab + st->st_name);
+		it = RB_FIND(isymb_tree, &isymbt, &tmp);
+		if (it != NULL) {
 			TAILQ_REMOVE(&otherq, it, it_fnext);
 			TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
 			it->it_idx = fidx++;
-			break;
 		}
 
 #if DEBUG
