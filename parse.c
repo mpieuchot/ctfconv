@@ -43,7 +43,6 @@ void		 parse_cu(struct dwcu *, struct itype_queue *);
 void		 resolve(struct itype *, struct itype_queue *, size_t);
 void		 merge(struct itype_queue *);
 
-struct itype	*insert_void(unsigned int);
 struct itype	*parse_base(struct dwdie *, size_t);
 struct itype	*parse_refers(struct dwdie *, size_t, int);
 struct itype	*parse_array(struct dwdie *, size_t);
@@ -60,6 +59,9 @@ size_t		 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
+struct itype	*it_new(uint64_t, size_t, char *, uint32_t, uint16_t, uint16_t,
+		     unsigned int);
+void		 it_free(struct itype *);
 int		 it_cmp(struct itype *, struct itype *);
 int		 it_name_cmp(struct itype *, struct itype *);
 
@@ -94,7 +96,8 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		RB_INIT(&itypet[i]);
 	RB_INIT(&isymbt);
 
-	void_it = insert_void(++tidx);
+	void_it = it_new(++tidx, VOID_OFFSET, xstrdup("void"), 0,
+	    CTF_INT_SIGNED, CTF_K_INTEGER, 0);
 	TAILQ_INSERT_TAIL(&itypeq, void_it, it_next);
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
@@ -173,6 +176,25 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 #endif
 }
 
+struct itype *
+it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
+    uint16_t type, unsigned int flags)
+{
+	struct itype *it;
+
+	it = xcalloc(1, sizeof(*it));
+	TAILQ_INIT(&it->it_members);
+	it->it_flags = flags;
+	it->it_off = off;
+	it->it_idx = index;
+	it->it_enc = enc;
+	it->it_type = type;
+	it->it_name = name;
+	it->it_size = size;
+
+	return it;
+}
+
 void
 it_free(struct itype *it)
 {
@@ -185,7 +207,6 @@ it_free(struct itype *it)
 		TAILQ_REMOVE(&it->it_members, im, im_next);
 		free(im);
 	}
-
 
 	free(it->it_name);
 	free(it);
@@ -400,24 +421,6 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 
 		TAILQ_INSERT_TAIL(itypeq, it, it_next);
 	}
-}
-
-struct itype *
-insert_void(unsigned int i)
-{
-	struct itype *it;
-
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = 0; /* Do not need to be resolved. */
-	it->it_off = VOID_OFFSET;
-	it->it_idx = i;
-	it->it_enc = CTF_INT_SIGNED;
-	it->it_type = CTF_K_INTEGER;
-	it->it_name = "void";
-	it->it_size = 0;
-
-	return it;
 }
 
 struct itype *
