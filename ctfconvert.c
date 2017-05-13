@@ -259,11 +259,12 @@ elf_sort(void)
 #endif
 		}
 
-		if ((TAILQ_NEXT(it, it_fnext) != NULL)) {
+		if (it->it_flags & ITF_SYMBOLFOUND) {
 			warnx("%s: already inserted", it->it_name);
-			continue;
+			it = it_dup(it);
 		}
 
+		it->it_flags |= ITF_SYMBOLFOUND;
 		TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
 	}
 }

@@ -195,6 +195,29 @@ it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
 	return it;
 }
 
+struct itype *
+it_dup(struct itype *it)
+{
+	struct imember *copim, *im;
+	struct itype *copit;
+
+	copit = it_new(it->it_idx, it->it_off, xstrdup(it->it_name),
+	    it->it_size, it->it_enc, it->it_type, it->it_flags);
+
+	copit->it_refp = it->it_refp;
+	copit->it_nelems = it->it_nelems;
+
+	TAILQ_FOREACH(im, &it->it_members, im_next) {
+		copim = xcalloc(1, sizeof(*im));
+		copim->im_name = im->im_name;
+		copim->im_ref = im->im_ref;
+		copim->im_off = im->im_off;
+		copim->im_refp = im->im_refp;
+		TAILQ_INSERT_TAIL(&copit->it_members, copim, im_next);
+	}
+
+	return copit;
+}
 void
 it_free(struct itype *it)
 {

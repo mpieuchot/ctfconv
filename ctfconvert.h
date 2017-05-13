@@ -47,6 +47,7 @@ struct itype {
 #define	ITF_UNRESOLVED_MEMBERS	0x02
 #define	ITF_FUNCTION		0x04
 #define	ITF_VARARGS		0x08
+#define	ITF_SYMBOLFOUND		0x10
 };
 
 /*
@@ -68,3 +69,5 @@ extern struct isymb_tree isymbt;	    /* tree of symbols */
 extern uint16_t long_tidx;		    /* type ID for "long" */
 
 RB_PROTOTYPE(isymb_tree, itype, it_node, it_name_cmp);
+
+struct itype *it_dup(struct itype *);
