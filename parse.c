@@ -259,7 +259,6 @@ merge(struct itype_queue *otherq)
 
 		/* Move functions to their own list. */
 		if (it->it_flags & ITF_FUNCTION) {
-			TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
 			RB_INSERT(isymb_tree, &isymbt, it);
 			continue;
 		}

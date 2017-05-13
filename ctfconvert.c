@@ -232,13 +232,8 @@ elf_convert(char *p, size_t filesize)
 void
 elf_sort(void)
 {
-	struct itype_queue	 otherq;
 	struct itype		*it, tmp;
 	size_t			 i;
-
-	TAILQ_INIT(&otherq);
-	TAILQ_CONCAT(&otherq, &ifuncq, it_fnext);
-	TAILQ_INIT(&ifuncq);
 
 	memset(&tmp, 0, sizeof(tmp));
 	for (i = 0; i < nsymb; i++) {
@@ -262,22 +257,15 @@ elf_sort(void)
 #ifdef DEBUG
 			warnx("symbol not found: %s", strtab + st->st_name);
 #endif
-		} else {
-			TAILQ_REMOVE(&otherq, it, it_fnext);
+		}
+
+		if ((TAILQ_NEXT(it, it_fnext) != NULL)) {
+			warnx("%s: already inserted", it->it_name);
+			continue;
 		}
 
 		TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
 	}
-
-#ifdef DEBUG
-	if (!TAILQ_EMPTY(&otherq)) {
-		int fidx = -1;
-
-		warnx("skiping some function declarations");
-		TAILQ_FOREACH(it, &otherq, it_fnext)
-			dump_func(it, &fidx);
-	}
-#endif
 }
 
 /* Display parsed types a la ctfdump(1) */
