@@ -59,8 +59,8 @@ size_t		 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
-struct itype	*it_new(uint64_t, size_t, char *, uint32_t, uint16_t, uint16_t,
-		     unsigned int);
+struct itype	*it_new(uint64_t, size_t, char *, uint32_t, uint16_t, uint64_t,
+		     uint16_t, unsigned int);
 void		 it_free(struct itype *);
 int		 it_cmp(struct itype *, struct itype *);
 int		 it_name_cmp(struct itype *, struct itype *);
@@ -97,7 +97,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	RB_INIT(&isymbt);
 
 	void_it = it_new(++tidx, VOID_OFFSET, xstrdup("void"), 0,
-	    CTF_INT_SIGNED, CTF_K_INTEGER, 0);
+	    CTF_INT_SIGNED, 0, CTF_K_INTEGER, 0);
 	TAILQ_INSERT_TAIL(&itypeq, void_it, it_next);
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
@@ -178,7 +178,7 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 
 struct itype *
 it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
-    uint16_t type, unsigned int flags)
+    uint64_t ref, uint16_t type, unsigned int flags)
 {
 	struct itype *it;
 
@@ -186,6 +186,7 @@ it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
 	TAILQ_INIT(&it->it_members);
 	it->it_flags = flags;
 	it->it_off = off;
+	it->it_ref = ref;
 	it->it_idx = index;
 	it->it_enc = enc;
 	it->it_type = type;
@@ -202,7 +203,7 @@ it_dup(struct itype *it)
 	struct itype *copit;
 
 	copit = it_new(it->it_idx, it->it_off, xstrdup(it->it_name),
-	    it->it_size, it->it_enc, it->it_type, it->it_flags);
+	    it->it_size, it->it_enc, it->it_ref, it->it_type, it->it_flags);
 
 	copit->it_refp = it->it_refp;
 	copit->it_nelems = it->it_nelems;
@@ -522,15 +523,8 @@ parse_base(struct dwdie *die, size_t psz)
 		return (NULL);
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = 0; /* Do not need to be resolved. */
-	it->it_off = die->die_offset;
-	it->it_idx = ++tidx;
-	it->it_enc = encoding;
-	it->it_type = type;
-	it->it_name = xstrdup(enc2name(enc));
-	it->it_size = bits;
+	it = it_new(++tidx, die->die_offset, xstrdup(enc2name(enc)), bits,
+	    encoding, 0, type, 0);
 
 	return it;
 }
@@ -561,15 +555,8 @@ parse_refers(struct dwdie *die, size_t psz, int type)
 		}
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = ITF_UNRESOLVED;
-	it->it_off = die->die_offset;
-	it->it_ref = ref;
-	it->it_idx = ++tidx;
-	it->it_size = size;
-	it->it_type = type;
-	it->it_name = name;
+	it = it_new(++tidx, die->die_offset, name, size, 0, ref, type,
+	    ITF_UNRESOLVED);
 
 	if (it->it_ref == 0 && (it->it_size == sizeof(void *) ||
 	    type == CTF_K_CONST || type == CTF_K_VOLATILE || CTF_K_POINTER)) {
@@ -604,14 +591,8 @@ parse_array(struct dwdie *die, size_t psz)
 		}
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = ITF_UNRESOLVED;
-	it->it_off = die->die_offset;
-	it->it_ref = ref;
-	it->it_idx = ++tidx;
-	it->it_type = CTF_K_ARRAY;
-	it->it_name = name;
+	it = it_new(++tidx, die->die_offset, name, 0, 0, ref, CTF_K_ARRAY,
+	    ITF_UNRESOLVED);
 
 	subparse_subrange(die, psz, it);
 
@@ -641,14 +622,7 @@ parse_enum(struct dwdie *die, size_t psz)
 		}
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_off = die->die_offset;
-	it->it_ref = 0;
-	it->it_idx = ++tidx;
-	it->it_size = size;
-	it->it_type = CTF_K_ENUM;
-	it->it_name = name;
+	it = it_new(++tidx, die->die_offset, name, size, 0, 0, CTF_K_ENUM, 0);
 
 	return it;
 }
@@ -717,15 +691,8 @@ parse_struct(struct dwdie *die, size_t psz, int type)
 		}
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = ITF_UNRESOLVED_MEMBERS;
-	it->it_off = die->die_offset;
-	it->it_ref = 0;
-	it->it_idx = ++tidx;
-	it->it_size = size;
-	it->it_type = type;
-	it->it_name = name;
+	it = it_new(++tidx, die->die_offset, name, size, 0, 0, type,
+	    ITF_UNRESOLVED_MEMBERS);
 
 	subparse_member(die, psz, it);
 
@@ -881,14 +848,8 @@ parse_function(struct dwdie *die, size_t psz)
 		}
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = ITF_UNRESOLVED|ITF_FUNCTION;
-	it->it_off = die->die_offset;
-	it->it_ref = ref;		/* return type */
-	it->it_idx = ++fidx;
-	it->it_type = CTF_K_FUNCTION;
-	it->it_name = name;
+	it = it_new(++fidx, die->die_offset, name, 0, 0, ref, CTF_K_FUNCTION,
+	    ITF_UNRESOLVED|ITF_FUNCTION);
 
 	subparse_arguments(die, psz, it);
 
@@ -924,14 +885,8 @@ parse_funcptr(struct dwdie *die, size_t psz)
 		}
 	}
 
-	it = xcalloc(1, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
-	it->it_flags = ITF_UNRESOLVED;
-	it->it_off = die->die_offset;
-	it->it_ref = ref;
-	it->it_idx = ++tidx;
-	it->it_type = CTF_K_FUNCTION;
-	it->it_name = name;
+	it = it_new(++tidx, die->die_offset, name, 0, 0, ref, CTF_K_FUNCTION,
+	    ITF_UNRESOLVED);
 
 	subparse_arguments(die, psz, it);
 
