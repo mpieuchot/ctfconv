@@ -50,6 +50,7 @@ struct itype	*parse_enum(struct dwdie *, size_t);
 struct itype	*parse_struct(struct dwdie *, size_t, int);
 struct itype	*parse_function(struct dwdie *, size_t);
 struct itype	*parse_funcptr(struct dwdie *, size_t);
+struct itype	*parse_variable(struct dwdie *, size_t);
 
 void		 subparse_subrange(struct dwdie *, size_t, struct itype *);
 void		 subparse_member(struct dwdie *, size_t, struct itype *);
@@ -68,7 +69,7 @@ int		 it_name_cmp(struct itype *, struct itype *);
 RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
 struct isymb_tree		 isymbt;
 struct itype			*void_it;
-uint16_t			 tidx, fidx;	/* type and function indexes */
+uint16_t			 tidx, fidx, oidx; /* type, func & object IDs */
 uint16_t			 long_tidx;	/* index of "long", for array */
 
 
@@ -271,7 +272,12 @@ it_cmp(struct itype *a, struct itype *b)
 int
 it_name_cmp(struct itype *a, struct itype *b)
 {
-	return strcmp(a->it_name, b->it_name);
+	int diff;
+
+	if ((diff = strcmp(a->it_name, b->it_name)) != 0)
+		return diff;
+
+	return ((a->it_flags|ITF_SYMBOLFOUND) - (b->it_flags|ITF_SYMBOLFOUND));
 }
 
 /*
@@ -302,9 +308,14 @@ merge(struct itype_queue *otherq)
 	for (; it != NULL; it = nit) {
 		nit = TAILQ_NEXT(it, it_next);
 
-		/* Move functions to their own list. */
-		if (it->it_flags & ITF_FUNCTION) {
-			RB_INSERT(isymb_tree, &isymbt, it);
+		/* Move functions & variable to their own list. */
+		if (it->it_flags & (ITF_FUNC|ITF_OBJECT)) {
+			/*
+			 * FIXME: allow static variables with the same name
+			 * to be of different type.
+			 */
+			if (RB_FIND(isymb_tree, &isymbt, it) == NULL)
+				RB_INSERT(isymb_tree, &isymbt, it);
 			continue;
 		}
 
@@ -330,7 +341,7 @@ merge(struct itype_queue *otherq)
 				}
 
 				/* Adjust indexes, assume newidx < oldidx */
-				if (!(it->it_flags & ITF_FUNCTION) &&
+				if (!(it->it_flags & (ITF_FUNC|ITF_OBJECT)) &&
 				    (it->it_idx > old->it_idx))
 					it->it_idx--;
 
@@ -345,7 +356,7 @@ merge(struct itype_queue *otherq)
 
 	/* Update global index to match removed entries. */
 	it = TAILQ_LAST(&itypeq, itype_queue);
-	while (it != NULL && (it->it_flags & ITF_FUNCTION))
+	while (it != NULL && (it->it_flags & (ITF_FUNC|ITF_OBJECT)))
 		it = TAILQ_PREV(it, itype_queue, it_next);
 
 	if (it != NULL)
@@ -374,12 +385,16 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			break;
 		case DW_TAG_structure_type:
 			it = parse_struct(die, psz, CTF_K_STRUCT);
+			if (it == NULL)
+				continue;
 			break;
 		case DW_TAG_typedef:
 			it = parse_refers(die, psz, CTF_K_TYPEDEF);
 			break;
 		case DW_TAG_union_type:
 			it = parse_struct(die, psz, CTF_K_UNION);
+			if (it == NULL)
+				continue;
 			break;
 		case DW_TAG_base_type:
 			it = parse_base(die, psz);
@@ -429,11 +444,19 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			    it->it_type == CTF_K_TYPEDEF)
 				continue;
 
+			if (it->it_flags & ITF_OBJECT)
+				continue;
+
 			assert(it->it_type == CTF_K_FUNCTION);
 			continue;
+		case DW_TAG_variable:
+			it = parse_variable(die, psz);
+			/* Unnamed variables are discarded. */
+			if (it == NULL)
+				continue;
+			break;
 #if 1
 		case DW_TAG_lexical_block:
-		case DW_TAG_variable:
 		case DW_TAG_inlined_subroutine:
 			continue;
 #endif
@@ -671,7 +694,7 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 struct itype *
 parse_struct(struct dwdie *die, size_t psz, int type)
 {
-	struct itype *it;
+	struct itype *it = NULL;
 	struct dwaval *dav;
 	char *name = NULL;
 	size_t size = 0;
@@ -849,7 +872,7 @@ parse_function(struct dwdie *die, size_t psz)
 	}
 
 	it = it_new(++fidx, die->die_offset, name, 0, 0, ref, CTF_K_FUNCTION,
-	    ITF_UNRESOLVED|ITF_FUNCTION);
+	    ITF_UNRESOLVED|ITF_FUNC);
 
 	subparse_arguments(die, psz, it);
 
@@ -895,6 +918,41 @@ parse_funcptr(struct dwdie *die, size_t psz)
 		it->it_flags &= ~ITF_UNRESOLVED;
 		it->it_ref = VOID_OFFSET;
 		it->it_refp = void_it;
+	}
+
+	return it;
+}
+
+struct itype *
+parse_variable(struct dwdie *die, size_t psz)
+{
+	struct itype *it = NULL;
+	struct dwaval *dav;
+	char *name = NULL;
+	size_t ref = 0;
+	int declaration = 0;
+
+	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
+		switch (dav->dav_dat->dat_attr) {
+		case DW_AT_declaration:
+			declaration = dav2val(dav, psz);
+			break;
+		case DW_AT_name:
+			name = xstrdup(dav2str(dav));
+			break;
+		case DW_AT_type:
+			ref = dav2val(dav, psz);
+			break;
+		default:
+			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
+			break;
+		}
+	}
+
+
+	if (!declaration && name != NULL) {
+		it = it_new(++oidx, die->die_offset, name, 0, 0, ref, 0,
+		    ITF_UNRESOLVED|ITF_OBJECT);
 	}
 
 	return it;

@@ -135,7 +135,7 @@ imcs_add_string(struct imcs *imcs, const char *str)
 void
 imcs_add_func(struct imcs *imcs, struct itype *it)
 {
-	unsigned short		 func, arg;
+	uint16_t		 func, arg;
 	struct imember		*im;
 	int			 kind, root, vlen;
 
@@ -156,6 +156,15 @@ imcs_add_func(struct imcs *imcs, struct itype *it)
 		arg = im->im_refp->it_idx;
 		dbuf_copy(&imcs->body, &arg, sizeof(arg));
 	}
+}
+
+void
+imcs_add_obj(struct imcs *imcs, struct itype *it)
+{
+	uint16_t		 type;
+
+	type = it->it_refp->it_idx;
+	dbuf_copy(&imcs->body, &type, sizeof(type));
 }
 
 void
@@ -292,14 +301,15 @@ imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 	/* Fill the buffer */
 	dbuf_copy(&imcs->body, &ctl, sizeof(ctl));
 
-	/* FIXME */
 	cth->cth_objtoff = dbuf_pad(&imcs->body, 2);
+	TAILQ_FOREACH(it, &iobjq, it_symb)
+		imcs_add_obj(imcs, it);
 
 	/*
 	 * Insert functions
 	 */
 	cth->cth_funcoff = dbuf_pad(&imcs->body, 2);
-	TAILQ_FOREACH(it, &ifuncq, it_fnext)
+	TAILQ_FOREACH(it, &ifuncq, it_symb)
 		imcs_add_func(imcs, it);
 
 	/*
@@ -307,7 +317,7 @@ imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 	 */
 	cth->cth_typeoff = dbuf_pad(&imcs->body, 4);
 	TAILQ_FOREACH(it, &itypeq, it_next) {
-		if (it->it_flags & ITF_FUNCTION)
+		if (it->it_flags & (ITF_FUNC|ITF_OBJECT))
 			continue;
 
 		imcs_add_type(imcs, it);

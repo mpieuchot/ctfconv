@@ -52,6 +52,7 @@ int		 elf_convert(char *, size_t);
 void		 elf_sort(void);
 void		 dump_type(struct itype *);
 void		 dump_func(struct itype *, int *);
+void		 dump_obj(struct itype *, int *);
 
 /* elf.c */
 int		 iself(const char *, size_t);
@@ -69,6 +70,7 @@ const char	*ctf_enc2name(unsigned short);
 /* lists of parsed types and functions */
 struct itype_queue itypeq = TAILQ_HEAD_INITIALIZER(itypeq);
 struct itype_queue ifuncq = TAILQ_HEAD_INITIALIZER(ifuncq);
+struct itype_queue iobjq = TAILQ_HEAD_INITIALIZER(iobjq);
 
 __dead void
 usage(void)
@@ -120,13 +122,18 @@ main(int argc, char *argv[])
 		return error;
 
 	if (dump) {
-		int fidx = -1;
+		int fidx = -1, oidx = -1;
 
-		TAILQ_FOREACH(it, &ifuncq, it_fnext)
+		TAILQ_FOREACH(it, &iobjq, it_symb)
+			dump_obj(it, &oidx);
+		printf("\n");
+
+		TAILQ_FOREACH(it, &ifuncq, it_symb)
 			dump_func(it, &fidx);
 		printf("\n");
+
 		TAILQ_FOREACH(it, &itypeq, it_next) {
-			if (it->it_flags & ITF_FUNCTION)
+			if (it->it_flags & (ITF_FUNC|ITF_OBJECT))
 				continue;
 
 			dump_type(it);
@@ -238,34 +245,57 @@ elf_sort(void)
 	memset(&tmp, 0, sizeof(tmp));
 	for (i = 0; i < nsymb; i++) {
 		const Elf_Sym	*st = &symtab[i];
+		char 		*sname;
 
 		if (st->st_shndx == SHN_UNDEF || st->st_shndx == SHN_COMMON)
 			continue;
 
-		if (ELF_ST_TYPE(st->st_info) != STT_FUNC)
+		switch (ELF_ST_TYPE(st->st_info)) {
+		case STT_FUNC:
+			tmp.it_flags = ITF_FUNC;
+			break;
+		case STT_OBJECT:
+			tmp.it_flags = ITF_OBJECT;
+			break;
+		default:
 			continue;
+		}
 
-		tmp.it_name = (char *)(strtab + st->st_name);
+		/*
+		 * Skip local suffix
+		 *
+		 * FIXME: only skip local copies.
+		 */
+		sname = xstrdup(strtab + st->st_name);
+		tmp.it_name = strtok(sname, ".");
 		it = RB_FIND(isymb_tree, &isymbt, &tmp);
+		tmp.it_name = (char *)(strtab + st->st_name);
+		free(sname);
+
 		if (it == NULL) {
 			/* Insert 'unknown' entry to match symbol order. */
-			it = xcalloc(1, sizeof(*it));
-			TAILQ_INIT(&it->it_members);
-			it->it_nelems = 0;
-			it->it_type = CTF_K_UNKNOWN;
+			it = it_dup(&tmp);
 			it->it_refp = it;
 #ifdef DEBUG
-			warnx("symbol not found: %s", strtab + st->st_name);
+			warnx("symbol not found: %s", it->it_name);
 #endif
 		}
 
 		if (it->it_flags & ITF_SYMBOLFOUND) {
+#ifdef DEBUG
 			warnx("%s: already inserted", it->it_name);
+#endif
 			it = it_dup(it);
 		}
 
+		/* Save symbol index for dump. */
+		it->it_ref = i;
+
 		it->it_flags |= ITF_SYMBOLFOUND;
-		TAILQ_INSERT_TAIL(&ifuncq, it, it_fnext);
+		if (it->it_flags & ITF_FUNC)
+			TAILQ_INSERT_TAIL(&ifuncq, it, it_symb);
+		else
+			TAILQ_INSERT_TAIL(&iobjq, it, it_symb);
 	}
 }
 
@@ -274,6 +304,25 @@ void
 dump_type(struct itype *it)
 {
 	struct imember *im;
+
+#ifdef DEBUG
+	switch (it->it_type) {
+	case CTF_K_POINTER:
+	case CTF_K_TYPEDEF:
+	case CTF_K_VOLATILE:
+	case CTF_K_CONST:
+	case CTF_K_RESTRICT:
+	case CTF_K_ARRAY:
+	case CTF_K_FUNCTION:
+		if (it->it_refp == NULL) {
+			printf("unresolved: %s type=%d\n", it->it_name,
+			    it->it_type);
+			return;
+		}
+	default:
+		break;
+	}
+#endif
 
 	switch (it->it_type) {
 	case CTF_K_FLOAT:
@@ -363,6 +412,17 @@ dump_func(struct itype *it, int *idx)
 		    TAILQ_NEXT(im, im_next) ? ", " : "");
 	}
 	printf(")\n");
+}
+
+void
+dump_obj(struct itype *it, int *idx)
+{
+	int l;
+
+	(*idx)++;
+
+	l = printf("  [%u] %u", (*idx), it->it_refp->it_idx);
+	printf("%*s %s (%llu)\n", 14 - l, "", it->it_name, it->it_ref);
 }
 
 const char *

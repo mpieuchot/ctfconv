@@ -25,7 +25,7 @@ struct imember;
  */
 struct itype {
 	TAILQ_ENTRY(itype)	 it_next;   /* itype: global queue of types */
-	TAILQ_ENTRY(itype)	 it_fnext;  /* itype: global queue of funcs */
+	TAILQ_ENTRY(itype)	 it_symb;   /* itype: global queue of symbol */
 	RB_ENTRY(itype)		 it_node;   /* itype: per-type tree of types */
 	TAILQ_HEAD(, imember)	 it_members;
 
@@ -45,9 +45,10 @@ struct itype {
 	unsigned int		 it_flags;  /* itype: parser flags */
 #define	ITF_UNRESOLVED		0x01
 #define	ITF_UNRESOLVED_MEMBERS	0x02
-#define	ITF_FUNCTION		0x04
-#define	ITF_VARARGS		0x08
-#define	ITF_SYMBOLFOUND		0x10
+#define	ITF_FUNC		0x04
+#define	ITF_OBJECT		0x08
+#define	ITF_VARARGS		0x10
+#define	ITF_SYMBOLFOUND		0x20
 };
 
 /*
@@ -64,7 +65,8 @@ struct imember {
 TAILQ_HEAD(itype_queue, itype);
 RB_HEAD(isymb_tree, itype);
 
-extern struct itype_queue itypeq, ifuncq;   /* lists of types & functions */
+/* lists of types, functions & data objects */
+extern struct itype_queue itypeq, ifuncq, iobjq;
 extern struct isymb_tree isymbt;	    /* tree of symbols */
 extern uint16_t long_tidx;		    /* type ID for "long" */
 
