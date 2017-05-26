@@ -771,7 +771,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 		}
 
 		im = xcalloc(1, sizeof(*im));
-		im->im_off = off;
+		im->im_off = 8 * off;
 		im->im_ref = ref;
 		im->im_name = name;
 
