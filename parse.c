@@ -117,7 +117,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		dw_dcu_free(dcu);
 	}
 
-	/* Find type "long" */
+	/* We force array's index type to be 'long', for that we need its ID. */
 	RB_FOREACH(it, itype_tree, &itypet[CTF_K_INTEGER]) {
 		if (it->it_name == NULL || it->it_size != (8 * sizeof(long)))
 			continue;
