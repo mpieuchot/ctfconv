@@ -136,12 +136,15 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 void
 resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 {
-	int		 toresolve = it->it_nelems;
 	struct itype	*tmp;
 	struct imember	*im;
+	unsigned int	 toresolve = it->it_nelems;
 
-	if ((it->it_flags & ITF_UNRES_MEMB) && !TAILQ_EMPTY(&it->it_members)) {
+	if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
+			if (toresolve == 0)
+				break;
+
 			TAILQ_FOREACH(im, &it->it_members, im_next) {
 				if (tmp->it_off == (im->im_ref + offset)) {
 					im->im_refp = tmp;
@@ -149,10 +152,10 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 				}
 			}
 		}
-	}
 
-	if (toresolve == 0)
-		it->it_flags &= ~ITF_UNRES_MEMB;
+		if (toresolve == 0)
+			it->it_flags &= ~ITF_UNRES_MEMB;
+	}
 
 	if (it->it_flags & ITF_UNRES) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
@@ -717,8 +720,7 @@ parse_struct(struct dwdie *die, size_t psz, int type, size_t off)
 		}
 	}
 
-	it = it_new(++tidx, die->die_offset, name, size, 0, 0, type,
-	    ITF_UNRES_MEMB);
+	it = it_new(++tidx, die->die_offset, name, size, 0, 0, type, 0);
 
 	subparse_member(die, psz, it, off);
 
@@ -752,6 +754,8 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 		/* Skip members of members */
 		if (die->die_lvl > lvl + 1)
 			continue;
+
+		it->it_flags |= ITF_UNRES_MEMB;
 
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
