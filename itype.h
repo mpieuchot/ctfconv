@@ -43,12 +43,13 @@ struct itype {
 	uint8_t			 __pad[2];
 
 	unsigned int		 it_flags;  /* itype: parser flags */
-#define	ITF_UNRESOLVED		0x01
-#define	ITF_UNRESOLVED_MEMBERS	0x02
-#define	ITF_FUNC		0x04
-#define	ITF_OBJECT		0x08
-#define	ITF_VARARGS		0x10
-#define	ITF_SYMBOLFOUND		0x20
+#define	ITF_UNRES		 0x01	    /* needs to be resolved */
+#define	ITF_UNRES_MEMB		 0x02	    /* members need to be resolved */
+#define	ITF_FUNC		 0x04	    /* is a function */
+#define	ITF_OBJ			 0x08	    /* is an object */
+#define	ITF_VARARGS		 0x10	    /* takes varargs */
+#define	ITF_INSERTED		 0x20	    /* already found/inserted */
+#define	ITF_MASK	ITF_INSERTED
 };
 
 /*

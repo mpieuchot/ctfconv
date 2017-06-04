@@ -136,7 +136,7 @@ main(int argc, char *argv[])
 		printf("\n");
 
 		TAILQ_FOREACH(it, &itypeq, it_next) {
-			if (it->it_flags & (ITF_FUNC|ITF_OBJECT))
+			if (it->it_flags & (ITF_FUNC|ITF_OBJ))
 				continue;
 
 			dump_type(it);
@@ -258,7 +258,7 @@ elf_sort(void)
 			tmp.it_flags = ITF_FUNC;
 			break;
 		case STT_OBJECT:
-			tmp.it_flags = ITF_OBJECT;
+			tmp.it_flags = ITF_OBJ;
 			break;
 		default:
 			continue;
@@ -284,7 +284,7 @@ elf_sort(void)
 #endif
 		}
 
-		if (it->it_flags & ITF_SYMBOLFOUND) {
+		if (it->it_flags & ITF_INSERTED) {
 #ifdef DEBUG
 			warnx("%s: already inserted", it->it_name);
 #endif
@@ -294,7 +294,7 @@ elf_sort(void)
 		/* Save symbol index for dump. */
 		it->it_ref = i;
 
-		it->it_flags |= ITF_SYMBOLFOUND;
+		it->it_flags |= ITF_INSERTED;
 		if (it->it_flags & ITF_FUNC)
 			TAILQ_INSERT_TAIL(&ifuncq, it, it_symb);
 		else

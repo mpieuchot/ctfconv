@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Martin Pieuchot <mpi@openbsd.org>
+ * Copyright (c) 2016-2017 Martin Pieuchot
  * Copyright (c) 2016 Jasper Lievisse Adriaanse <jasper@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -140,8 +140,7 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 	struct itype	*tmp;
 	struct imember	*im;
 
-	if ((it->it_flags & ITF_UNRESOLVED_MEMBERS) &&
-	    !TAILQ_EMPTY(&it->it_members)) {
+	if ((it->it_flags & ITF_UNRES_MEMB) && !TAILQ_EMPTY(&it->it_members)) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
 			TAILQ_FOREACH(im, &it->it_members, im_next) {
 				if (tmp->it_off == (im->im_ref + offset)) {
@@ -153,20 +152,20 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 	}
 
 	if (toresolve == 0)
-		it->it_flags &= ~ITF_UNRESOLVED_MEMBERS;
+		it->it_flags &= ~ITF_UNRES_MEMB;
 
-	if (it->it_flags & ITF_UNRESOLVED) {
+	if (it->it_flags & ITF_UNRES) {
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
 			if (tmp->it_off == (it->it_ref + offset)) {
 				it->it_refp = tmp;
-				it->it_flags &= ~ITF_UNRESOLVED;
+				it->it_flags &= ~ITF_UNRES;
 				break;
 			}
 		}
 	}
 
 #ifdef DEBUG
-	if (it->it_flags & (ITF_UNRESOLVED|ITF_UNRESOLVED_MEMBERS)) {
+	if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
 		printf("0x%zx: %s type=%d unresolved 0x%llx", it->it_off,
 		    it->it_name, it->it_type, it->it_ref);
 		if (toresolve)
@@ -280,7 +279,7 @@ it_name_cmp(struct itype *a, struct itype *b)
 	if ((diff = strcmp(a->it_name, b->it_name)) != 0)
 		return diff;
 
-	return ((a->it_flags|ITF_SYMBOLFOUND) - (b->it_flags|ITF_SYMBOLFOUND));
+	return ((a->it_flags|ITF_MASK) - (b->it_flags|ITF_MASK));
 }
 
 /*
@@ -312,7 +311,7 @@ merge(struct itype_queue *otherq)
 		nit = TAILQ_NEXT(it, it_next);
 
 		/* Move functions & variable to their own list. */
-		if (it->it_flags & (ITF_FUNC|ITF_OBJECT)) {
+		if (it->it_flags & (ITF_FUNC|ITF_OBJ)) {
 			/*
 			 * FIXME: allow static variables with the same name
 			 * to be of different type.
@@ -344,7 +343,7 @@ merge(struct itype_queue *otherq)
 				}
 
 				/* Adjust indexes, assume newidx < oldidx */
-				if (!(it->it_flags & (ITF_FUNC|ITF_OBJECT)) &&
+				if (!(it->it_flags & (ITF_FUNC|ITF_OBJ)) &&
 				    (it->it_idx > old->it_idx))
 					it->it_idx--;
 
@@ -359,7 +358,7 @@ merge(struct itype_queue *otherq)
 
 	/* Update global index to match removed entries. */
 	it = TAILQ_LAST(&itypeq, itype_queue);
-	while (it != NULL && (it->it_flags & (ITF_FUNC|ITF_OBJECT)))
+	while (it != NULL && (it->it_flags & (ITF_FUNC|ITF_OBJ)))
 		it = TAILQ_PREV(it, itype_queue, it_next);
 
 	if (it != NULL)
@@ -448,7 +447,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			    it->it_type == CTF_K_TYPEDEF)
 				continue;
 
-			if (it->it_flags & ITF_OBJECT)
+			if (it->it_flags & ITF_OBJ)
 				continue;
 
 			assert(it->it_type == CTF_K_FUNCTION);
@@ -583,12 +582,12 @@ parse_refers(struct dwdie *die, size_t psz, int type)
 	}
 
 	it = it_new(++tidx, die->die_offset, name, size, 0, ref, type,
-	    ITF_UNRESOLVED);
+	    ITF_UNRES);
 
 	if (it->it_ref == 0 && (it->it_size == sizeof(void *) ||
 	    type == CTF_K_CONST || type == CTF_K_VOLATILE || CTF_K_POINTER)) {
 		/* Work around GCC/clang not emiting a type for void */
-		it->it_flags &= ~ITF_UNRESOLVED;
+		it->it_flags &= ~ITF_UNRES;
 		it->it_ref = VOID_OFFSET;
 		it->it_refp = void_it;
 	}
@@ -619,7 +618,7 @@ parse_array(struct dwdie *die, size_t psz)
 	}
 
 	it = it_new(++tidx, die->die_offset, name, 0, 0, ref, CTF_K_ARRAY,
-	    ITF_UNRESOLVED);
+	    ITF_UNRES);
 
 	subparse_subrange(die, psz, it);
 
@@ -719,7 +718,7 @@ parse_struct(struct dwdie *die, size_t psz, int type, size_t off)
 	}
 
 	it = it_new(++tidx, die->die_offset, name, size, 0, 0, type,
-	    ITF_UNRESOLVED_MEMBERS);
+	    ITF_UNRES_MEMB);
 
 	subparse_member(die, psz, it, off);
 
@@ -834,7 +833,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 		if (tag != DW_TAG_formal_parameter)
 			break;
 
-		it->it_flags |= ITF_UNRESOLVED_MEMBERS;
+		it->it_flags |= ITF_UNRES_MEMB;
 
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
@@ -886,13 +885,13 @@ parse_function(struct dwdie *die, size_t psz)
 	}
 
 	it = it_new(++fidx, die->die_offset, name, 0, 0, ref, CTF_K_FUNCTION,
-	    ITF_UNRESOLVED|ITF_FUNC);
+	    ITF_UNRES|ITF_FUNC);
 
 	subparse_arguments(die, psz, it);
 
 	if (it->it_ref == 0) {
 		/* Work around GCC not emiting a type for void */
-		it->it_flags &= ~ITF_UNRESOLVED;
+		it->it_flags &= ~ITF_UNRES;
 		it->it_ref = VOID_OFFSET;
 		it->it_refp = void_it;
 	}
@@ -923,13 +922,13 @@ parse_funcptr(struct dwdie *die, size_t psz)
 	}
 
 	it = it_new(++tidx, die->die_offset, name, 0, 0, ref, CTF_K_FUNCTION,
-	    ITF_UNRESOLVED);
+	    ITF_UNRES);
 
 	subparse_arguments(die, psz, it);
 
 	if (it->it_ref == 0) {
 		/* Work around GCC not emiting a type for void */
-		it->it_flags &= ~ITF_UNRESOLVED;
+		it->it_flags &= ~ITF_UNRES;
 		it->it_ref = VOID_OFFSET;
 		it->it_refp = void_it;
 	}
@@ -966,7 +965,7 @@ parse_variable(struct dwdie *die, size_t psz)
 
 	if (!declaration && name != NULL) {
 		it = it_new(++oidx, die->die_offset, name, 0, 0, ref, 0,
-		    ITF_UNRESOLVED|ITF_OBJECT);
+		    ITF_UNRES|ITF_OBJ);
 	}
 
 	return it;

@@ -309,7 +309,7 @@ imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 	/* Insert types */
 	cth->cth_typeoff = dbuf_pad(&imcs->body, 4);
 	TAILQ_FOREACH(it, &itypeq, it_next) {
-		if (it->it_flags & (ITF_FUNC|ITF_OBJECT))
+		if (it->it_flags & (ITF_FUNC|ITF_OBJ))
 			continue;
 
 		imcs_add_type(imcs, it);
