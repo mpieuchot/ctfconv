@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Martin Pieuchot <mpi@openbsd.org>
+ * Copyright (c) 2016-2017 Martin Pieuchot
  * Copyright (c) 2016 Jasper Lievisse Adriaanse <jasper@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -49,7 +49,8 @@ struct itype {
 #define	ITF_OBJ			 0x08	    /* is an object */
 #define	ITF_VARARGS		 0x10	    /* takes varargs */
 #define	ITF_INSERTED		 0x20	    /* already found/inserted */
-#define	ITF_MASK	ITF_INSERTED
+#define	ITF_USED		 0x40	    /* referenced in the current CU */
+#define	ITF_MASK		(ITF_INSERTED|ITF_USED)
 };
 
 /*

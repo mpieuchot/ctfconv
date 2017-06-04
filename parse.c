@@ -41,6 +41,7 @@
 
 void		 cu_parse(struct dwcu *, struct itype_queue *);
 void		 cu_resolve(struct dwcu *, struct itype_queue *);
+void		 cu_reference(struct dwcu *, struct itype_queue *);
 void		 cu_merge(struct dwcu *, struct itype_queue *);
 
 struct itype	*parse_base(struct dwdie *, size_t);
@@ -110,6 +111,9 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		/* Resolve its types. */
 		cu_resolve(dcu, &cu_itypeq);
 
+		/* Mark used type as such. */
+		cu_reference(dcu, &cu_itypeq);
+
 		/* Merge them with the common type list. */
 		cu_merge(dcu, &cu_itypeq);
 
@@ -171,6 +175,23 @@ it_dup(struct itype *it)
 
 	return copit;
 }
+
+void
+it_reference(struct itype *it)
+{
+	struct imember *im;
+
+	if (it->it_flags & ITF_USED)
+		return;
+
+	it->it_flags |= ITF_USED;
+
+	if (it->it_refp != NULL)
+		it_reference(it->it_refp);
+	TAILQ_FOREACH(im, &it->it_members, im_next)
+		it_reference(im->im_refp);
+}
+
 void
 it_free(struct itype *it)
 {
@@ -292,6 +313,17 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
 	}
 }
 
+void
+cu_reference(struct dwcu *dcu, struct itype_queue *cutq)
+{
+	struct itype *it;
+
+	TAILQ_FOREACH(it, cutq, it_next) {
+		if (it->it_flags & (ITF_OBJ|ITF_FUNC))
+			it_reference(it);
+	}
+}
+
 /*
  * Merge type representation from a CU with already known types.
  *
@@ -332,15 +364,19 @@ cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
 		}
 
 		/* Look if we already have this type. */
-		prev = RB_FIND(itype_tree, &itypet[it->it_type], it);
+		if (it->it_flags & ITF_USED)
+			prev = RB_FIND(itype_tree, &itypet[it->it_type], it);
+		else
+			prev = NULL;
+
 		if (prev != NULL) {
 			struct itype *old = it;
 
 			/* Remove duplicate */
 			TAILQ_REMOVE(&itypeq, it, it_next);
 
-			it = TAILQ_NEXT(last, it_next);
-			while (it != NULL) {
+			for (it = TAILQ_NEXT(last, it_next); it != NULL;
+			    it = TAILQ_NEXT(it, it_next)) {
 				struct imember *im;
 
 				/* Substitute references */
@@ -352,17 +388,34 @@ cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
 						im->im_refp = prev;
 				}
 
-				/* Adjust indexes, assume newidx < oldidx */
-				if (!(it->it_flags & (ITF_FUNC|ITF_OBJ)) &&
-				    (it->it_idx > old->it_idx))
-					it->it_idx--;
+				if (it->it_flags & (ITF_FUNC|ITF_OBJ))
+					continue;
 
-				it = TAILQ_NEXT(it, it_next);
+				/* Adjust indexes, assume newidx < oldidx */
+				if (it->it_idx > old->it_idx)
+					it->it_idx--;
 			}
 
 			it_free(old);
-		} else {
+		} else if (it->it_flags & ITF_USED) {
 			RB_INSERT(itype_tree, &itypet[it->it_type], it);
+		} else {
+			struct itype *old = it;
+
+			/* Remove unused */
+			TAILQ_REMOVE(&itypeq, it, it_next);
+
+			for (it = TAILQ_NEXT(last, it_next); it != NULL;
+			    it = TAILQ_NEXT(it, it_next)) {
+				if (it->it_flags & (ITF_FUNC|ITF_OBJ))
+					continue;
+
+				/* Adjust indexes, assume newidx < oldidx */
+				if (it->it_idx > old->it_idx)
+					it->it_idx--;
+			}
+
+			it_free(old);
 		}
 	}
 
