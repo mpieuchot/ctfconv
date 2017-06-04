@@ -1,6 +1,6 @@
 
-PROG=		ctfconvert
-SRCS=		ctfconvert.c parse.c elf.c dw.c generate.c hash.c xmalloc.c
+PROG=		ctfconv
+SRCS=		ctfconv.c parse.c elf.c dw.c generate.c hash.c xmalloc.c
 
 CFLAGS+=	-W -Wall -Wstrict-prototypes -Wno-unused -Wunused-variable
 
@@ -8,7 +8,7 @@ CFLAGS+=	-DZLIB
 LDADD+=		-lz
 DPADD+=		${LIBZ}
 
-MAN=		ctfconvert.1 ctfstrip.1
+MAN=		ctfconv.1 ctfstrip.1
 
 afterinstall:
 	${INSTALL} ${INSTALL_COPY} -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \

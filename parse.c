@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ctfconvert.h"
+#include "itype.h"
 #include "xmalloc.h"
 #include "dwarf.h"
 #include "dw.h"

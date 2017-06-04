@@ -32,7 +32,7 @@
 #include <zlib.h>
 #endif /* ZLIB */
 
-#include "ctfconvert.h"
+#include "itype.h"
 #include "xmalloc.h"
 #include "hash.h"
 

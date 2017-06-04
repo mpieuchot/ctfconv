@@ -33,7 +33,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "ctfconvert.h"
+#include "itype.h"
 #include "xmalloc.h"
 
 #ifndef nitems
