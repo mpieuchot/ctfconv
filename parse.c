@@ -63,9 +63,12 @@ const char	*enc2name(unsigned short);
 
 struct itype	*it_new(uint64_t, size_t, char *, uint32_t, uint16_t, uint64_t,
 		     uint16_t, unsigned int);
+void		 it_reference(struct itype *);
 void		 it_free(struct itype *);
 int		 it_cmp(struct itype *, struct itype *);
 int		 it_name_cmp(struct itype *, struct itype *);
+void		 ir_add(struct itype *, struct itype *);
+void		 ir_purge(struct itype *);
 
 RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
 struct isymb_tree		 isymbt;
@@ -140,6 +143,7 @@ it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
 
 	it = xcalloc(1, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
+	SIMPLEQ_INIT(&it->it_refs);
 	it->it_flags = flags;
 	it->it_off = off;
 	it->it_ref = ref;
@@ -205,6 +209,7 @@ it_free(struct itype *it)
 		free(im);
 	}
 
+	ir_purge(it);
 	free(it->it_name);
 	free(it);
 }
@@ -252,6 +257,32 @@ it_name_cmp(struct itype *a, struct itype *b)
 	return ((a->it_flags|ITF_MASK) - (b->it_flags|ITF_MASK));
 }
 
+void
+ir_add(struct itype *it, struct itype *tmp)
+{
+	struct itref *ir;
+
+	SIMPLEQ_FOREACH(ir, &tmp->it_refs, ir_next) {
+		if (ir->ir_itp == it)
+			return;
+	}
+
+	ir = xmalloc(sizeof(*ir));
+	ir->ir_itp = it;
+	SIMPLEQ_INSERT_TAIL(&tmp->it_refs, ir, ir_next);
+}
+
+void
+ir_purge(struct itype *it)
+{
+	struct itref *ir;
+
+	while ((ir = SIMPLEQ_FIRST(&it->it_refs)) != NULL) {
+		SIMPLEQ_REMOVE_HEAD(&it->it_refs, ir_next);
+		free(ir);
+	}
+}
+
 /*
  * Worst case it's a O(n*n) resolution lookup, with ``n'' being the number
  * of elements in ``cutq''.
@@ -276,6 +307,7 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
 				TAILQ_FOREACH(im, &it->it_members, im_next) {
 					if (tmp->it_off == (im->im_ref + off)) {
 						im->im_refp = tmp;
+						ir_add(it, tmp);
 						toresolve--;
 					}
 				}
@@ -289,6 +321,7 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
 			TAILQ_FOREACH(tmp, cutq, it_next) {
 				if (tmp->it_off == (it->it_ref + off)) {
 					it->it_refp = tmp;
+					ir_add(it, tmp);
 					it->it_flags &= ~ITF_UNRES;
 					break;
 				}
@@ -324,6 +357,52 @@ cu_reference(struct dwcu *dcu, struct itype_queue *cutq)
 	}
 }
 
+void
+remove_dup(struct itype *it, struct itype *prev)
+{
+	struct itype *old = it;
+	struct itref *ir;
+	struct imember *im;
+
+	while ((ir = SIMPLEQ_FIRST(&old->it_refs)) != NULL) {
+		it = ir->ir_itp;
+
+		SIMPLEQ_REMOVE_HEAD(&old->it_refs, ir_next);
+		free(ir);
+
+		/* Substitute references */
+		if (it->it_refp == old)
+			it->it_refp = prev;
+
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
+			if (im->im_refp == old)
+				im->im_refp = prev;
+		}
+	}
+
+	old->it_flags &= ~ITF_USED;
+}
+
+void
+remove_unused(struct itype *it)
+{
+	struct itype *old = it;
+
+	assert(!(old->it_flags & ITF_USED));
+
+	for (it = TAILQ_NEXT(old, it_next); it; it = TAILQ_NEXT(it, it_next)) {
+		if (it->it_flags & (ITF_FUNC|ITF_OBJ))
+			continue;
+
+		/* Adjust indexes, assume newidx < oldidx */
+		if (it->it_idx > old->it_idx)
+			it->it_idx--;
+	}
+
+	/* Remove unused */
+	TAILQ_REMOVE(&itypeq, old, it_next);
+}
+
 /*
  * Merge type representation from a CU with already known types.
  *
@@ -334,13 +413,10 @@ cu_reference(struct dwcu *dcu, struct itype_queue *cutq)
 void
 cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
 {
-	struct itype *it, *nit;
-	struct itype *prev, *last;
+	struct itype *it, *nit, *prev;
+	struct itype_queue gc;
 
-	/* Remember last of the existing types. */
-	last = TAILQ_LAST(&itypeq, itype_queue);
-	if (last == NULL)
-		return;
+	TAILQ_INIT(&gc);
 
 	/* First ``it'' that needs a duplicate check. */
 	it = TAILQ_FIRST(cutq);
@@ -367,56 +443,26 @@ cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
 		if (it->it_flags & ITF_USED)
 			prev = RB_FIND(itype_tree, &itypet[it->it_type], it);
 		else
-			prev = NULL;
+			prev = it;
 
 		if (prev != NULL) {
-			struct itype *old = it;
+			if (it != prev)
+				remove_dup(it, prev);
+			remove_unused(it);
 
-			/* Remove duplicate */
-			TAILQ_REMOVE(&itypeq, it, it_next);
-
-			for (it = TAILQ_NEXT(last, it_next); it != NULL;
-			    it = TAILQ_NEXT(it, it_next)) {
-				struct imember *im;
-
-				/* Substitute references */
-				if (it->it_refp == old)
-					it->it_refp = prev;
-
-				TAILQ_FOREACH(im, &it->it_members, im_next) {
-					if (im->im_refp == old)
-						im->im_refp = prev;
-				}
-
-				if (it->it_flags & (ITF_FUNC|ITF_OBJ))
-					continue;
-
-				/* Adjust indexes, assume newidx < oldidx */
-				if (it->it_idx > old->it_idx)
-					it->it_idx--;
-			}
-
-			it_free(old);
+			/*
+			 * We cannot free ``it'' until all duplicated link
+			 * are fixed.
+			 */
+			TAILQ_INSERT_HEAD(&gc, it, it_next);
 		} else if (it->it_flags & ITF_USED) {
 			RB_INSERT(itype_tree, &itypet[it->it_type], it);
-		} else {
-			struct itype *old = it;
-
-			/* Remove unused */
-			TAILQ_REMOVE(&itypeq, it, it_next);
-
-			for (it = TAILQ_NEXT(last, it_next); it != NULL;
-			    it = TAILQ_NEXT(it, it_next)) {
-				if (it->it_flags & (ITF_FUNC|ITF_OBJ))
-					continue;
-
-				/* Adjust indexes, assume newidx < oldidx */
-				if (it->it_idx > old->it_idx)
-					it->it_idx--;
-			}
-
-			it_free(old);
 		}
+	}
+
+	while ((it = TAILQ_FIRST(&gc)) != NULL) {
+		TAILQ_REMOVE(&gc, it, it_next);
+		it_free(it);
 	}
 
 	/* Update global index to match removed entries. */

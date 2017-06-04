@@ -16,6 +16,7 @@
  */
 
 struct imember;
+struct itref;
 
 /*
  * Internal type representation.
@@ -27,7 +28,10 @@ struct itype {
 	TAILQ_ENTRY(itype)	 it_next;   /* itype: global queue of types */
 	TAILQ_ENTRY(itype)	 it_symb;   /* itype: global queue of symbol */
 	RB_ENTRY(itype)		 it_node;   /* itype: per-type tree of types */
-	TAILQ_HEAD(, imember)	 it_members;
+
+	SIMPLEQ_HEAD(, itref)	 it_refs;   /* itpye: backpointing refs */
+
+	TAILQ_HEAD(, imember)	 it_members;/* itype: members of struct/union */
 
 	size_t			 it_off;    /* DWARF: matching .abbrev offset */
 	uint64_t		 it_ref;    /* DWARF: CU offset of ref. type */
@@ -62,6 +66,15 @@ struct imember {
 	size_t			 im_ref;    /* CU offset of the field type */
 	size_t			 im_off;    /* field offset in struct/union */
 	struct itype		*im_refp;   /* resolved CTF type */
+};
+
+/*
+ * Used to build a list of backpointing references to speed up
+ * merging duplicated types.
+ */
+struct itref {
+	SIMPLEQ_ENTRY(itref)	 ir_next;
+	struct itype		*ir_itp;
 };
 
 TAILQ_HEAD(itype_queue, itype);
