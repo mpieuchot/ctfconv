@@ -262,11 +262,6 @@ ir_add(struct itype *it, struct itype *tmp)
 {
 	struct itref *ir;
 
-	SIMPLEQ_FOREACH(ir, &tmp->it_refs, ir_next) {
-		if (ir->ir_itp == it)
-			return;
-	}
-
 	ir = xmalloc(sizeof(*ir));
 	ir->ir_itp = it;
 	SIMPLEQ_INSERT_TAIL(&tmp->it_refs, ir, ir_next);
@@ -292,40 +287,47 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
 {
 	struct itype	*it, *tmp;
 	struct imember	*im;
-	unsigned int	 toresolve;
+	unsigned int	 toresolve, inserted;
 	size_t		 off = dcu->dcu_offset;
 
 	TAILQ_FOREACH(it, cutq, it_next) {
+		if (!(it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)))
+			continue;
+
 		/* All members need to be resolved. */
 		toresolve = it->it_nelems;
 
-		if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
-			TAILQ_FOREACH(tmp, cutq, it_next) {
-				if (toresolve == 0)
-					break;
+		TAILQ_FOREACH(tmp, cutq, it_next) {
+			inserted = 0;
 
+			if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
 				TAILQ_FOREACH(im, &it->it_members, im_next) {
 					if (tmp->it_off == (im->im_ref + off)) {
 						im->im_refp = tmp;
-						ir_add(it, tmp);
+						if (!inserted) {
+							inserted = 1;
+							ir_add(it, tmp);
+						}
 						toresolve--;
 					}
 				}
+				if (toresolve == 0)
+					it->it_flags &= ~ITF_UNRES_MEMB;
 			}
 
-			if (toresolve == 0)
-				it->it_flags &= ~ITF_UNRES_MEMB;
-		}
-
-		if (it->it_flags & ITF_UNRES) {
-			TAILQ_FOREACH(tmp, cutq, it_next) {
+			if (it->it_flags & ITF_UNRES) {
 				if (tmp->it_off == (it->it_ref + off)) {
 					it->it_refp = tmp;
-					ir_add(it, tmp);
+					if (!inserted) {
+						inserted = 1;
+						ir_add(it, tmp);
+					}
 					it->it_flags &= ~ITF_UNRES;
-					break;
 				}
 			}
+
+			if (!(it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)))
+				break;
 		}
 
 #ifdef DEBUG
