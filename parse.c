@@ -129,59 +129,6 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	}
 }
 
-/*
- * Worst case it's a O(n*n) resolution lookup, with ``n'' being the number
- * of elements in ``itypeq''.
- */
-void
-resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
-{
-	struct itype	*tmp;
-	struct imember	*im;
-	unsigned int	 toresolve = it->it_nelems;
-
-	if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
-		TAILQ_FOREACH(tmp, itypeq, it_next) {
-			if (toresolve == 0)
-				break;
-
-			TAILQ_FOREACH(im, &it->it_members, im_next) {
-				if (tmp->it_off == (im->im_ref + offset)) {
-					im->im_refp = tmp;
-					toresolve--;
-				}
-			}
-		}
-
-		if (toresolve == 0)
-			it->it_flags &= ~ITF_UNRES_MEMB;
-	}
-
-	if (it->it_flags & ITF_UNRES) {
-		TAILQ_FOREACH(tmp, itypeq, it_next) {
-			if (tmp->it_off == (it->it_ref + offset)) {
-				it->it_refp = tmp;
-				it->it_flags &= ~ITF_UNRES;
-				break;
-			}
-		}
-	}
-
-#ifdef DEBUG
-	if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
-		printf("0x%zx: %s type=%d unresolved 0x%llx", it->it_off,
-		    it->it_name, it->it_type, it->it_ref);
-		if (toresolve)
-			printf(": %d members", toresolve);
-		TAILQ_FOREACH(im, &it->it_members, im_next) {
-			if (im->im_refp == NULL)
-				printf("\n%zu: %s", im->im_ref, im->im_name);
-		}
-		printf("\n");
-	}
-#endif
-}
-
 struct itype *
 it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
     uint64_t ref, uint16_t type, unsigned int flags)
@@ -283,6 +230,59 @@ it_name_cmp(struct itype *a, struct itype *b)
 		return diff;
 
 	return ((a->it_flags|ITF_MASK) - (b->it_flags|ITF_MASK));
+}
+
+/*
+ * Worst case it's a O(n*n) resolution lookup, with ``n'' being the number
+ * of elements in ``itypeq''.
+ */
+void
+resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
+{
+	struct itype	*tmp;
+	struct imember	*im;
+	unsigned int	 toresolve = it->it_nelems;
+
+	if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
+		TAILQ_FOREACH(tmp, itypeq, it_next) {
+			if (toresolve == 0)
+				break;
+
+			TAILQ_FOREACH(im, &it->it_members, im_next) {
+				if (tmp->it_off == (im->im_ref + offset)) {
+					im->im_refp = tmp;
+					toresolve--;
+				}
+			}
+		}
+
+		if (toresolve == 0)
+			it->it_flags &= ~ITF_UNRES_MEMB;
+	}
+
+	if (it->it_flags & ITF_UNRES) {
+		TAILQ_FOREACH(tmp, itypeq, it_next) {
+			if (tmp->it_off == (it->it_ref + offset)) {
+				it->it_refp = tmp;
+				it->it_flags &= ~ITF_UNRES;
+				break;
+			}
+		}
+	}
+
+#ifdef DEBUG
+	if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
+		printf("0x%zx: %s type=%d unresolved 0x%llx", it->it_off,
+		    it->it_name, it->it_type, it->it_ref);
+		if (toresolve)
+			printf(": %d members", toresolve);
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
+			if (im->im_refp == NULL)
+				printf("\n%zu: %s", im->im_ref, im->im_name);
+		}
+		printf("\n");
+	}
+#endif
 }
 
 /*
