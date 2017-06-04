@@ -8,4 +8,10 @@ CFLAGS+=	-DZLIB
 LDADD+=		-lz
 DPADD+=		${LIBZ}
 
+MAN=		ctfconvert.1 ctfstrip.1
+
+afterinstall:
+	${INSTALL} ${INSTALL_COPY} -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+		${.CURDIR}/ctfstrip ${DESTDIR}${BINDIR}/ctfstrip
+
 .include <bsd.prog.mk>
