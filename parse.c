@@ -39,9 +39,9 @@
 
 #define VOID_OFFSET	1	/* Fake offset for generating "void" type. */
 
-void		 parse_cu(struct dwcu *, struct itype_queue *);
-void		 resolve(struct itype *, struct itype_queue *, size_t);
-void		 merge(struct itype_queue *);
+void		 cu_parse(struct dwcu *, struct itype_queue *);
+void		 cu_resolve(struct dwcu *, struct itype_queue *);
+void		 cu_merge(struct dwcu *, struct itype_queue *);
 
 struct itype	*parse_base(struct dwdie *, size_t);
 struct itype	*parse_refers(struct dwdie *, size_t, int);
@@ -105,14 +105,13 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		TAILQ_INIT(&cu_itypeq);
 
 		/* Parse this CU */
-		parse_cu(dcu, &cu_itypeq);
+		cu_parse(dcu, &cu_itypeq);
 
 		/* Resolve its types. */
-		TAILQ_FOREACH(it, &cu_itypeq, it_next)
-			resolve(it, &cu_itypeq, dcu->dcu_offset);
+		cu_resolve(dcu, &cu_itypeq);
 
 		/* Merge them with the common type list. */
-		merge(&cu_itypeq);
+		cu_merge(dcu, &cu_itypeq);
 
 		dw_dcu_free(dcu);
 	}
@@ -234,66 +233,74 @@ it_name_cmp(struct itype *a, struct itype *b)
 
 /*
  * Worst case it's a O(n*n) resolution lookup, with ``n'' being the number
- * of elements in ``itypeq''.
+ * of elements in ``cutq''.
  */
 void
-resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
+cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
 {
-	struct itype	*tmp;
+	struct itype	*it, *tmp;
 	struct imember	*im;
-	unsigned int	 toresolve = it->it_nelems;
+	unsigned int	 toresolve;
+	size_t		 off = dcu->dcu_offset;
 
-	if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
-		TAILQ_FOREACH(tmp, itypeq, it_next) {
+	TAILQ_FOREACH(it, cutq, it_next) {
+		/* All members need to be resolved. */
+		toresolve = it->it_nelems;
+
+		if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
+			TAILQ_FOREACH(tmp, cutq, it_next) {
+				if (toresolve == 0)
+					break;
+
+				TAILQ_FOREACH(im, &it->it_members, im_next) {
+					if (tmp->it_off == (im->im_ref + off)) {
+						im->im_refp = tmp;
+						toresolve--;
+					}
+				}
+			}
+
 			if (toresolve == 0)
-				break;
+				it->it_flags &= ~ITF_UNRES_MEMB;
+		}
 
-			TAILQ_FOREACH(im, &it->it_members, im_next) {
-				if (tmp->it_off == (im->im_ref + offset)) {
-					im->im_refp = tmp;
-					toresolve--;
+		if (it->it_flags & ITF_UNRES) {
+			TAILQ_FOREACH(tmp, cutq, it_next) {
+				if (tmp->it_off == (it->it_ref + off)) {
+					it->it_refp = tmp;
+					it->it_flags &= ~ITF_UNRES;
+					break;
 				}
 			}
 		}
 
-		if (toresolve == 0)
-			it->it_flags &= ~ITF_UNRES_MEMB;
-	}
-
-	if (it->it_flags & ITF_UNRES) {
-		TAILQ_FOREACH(tmp, itypeq, it_next) {
-			if (tmp->it_off == (it->it_ref + offset)) {
-				it->it_refp = tmp;
-				it->it_flags &= ~ITF_UNRES;
-				break;
-			}
-		}
-	}
-
 #ifdef DEBUG
-	if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
-		printf("0x%zx: %s type=%d unresolved 0x%llx", it->it_off,
-		    it->it_name, it->it_type, it->it_ref);
-		if (toresolve)
-			printf(": %d members", toresolve);
-		TAILQ_FOREACH(im, &it->it_members, im_next) {
-			if (im->im_refp == NULL)
-				printf("\n%zu: %s", im->im_ref, im->im_name);
+		if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
+			printf("0x%zx: %s type=%d unresolved 0x%llx",
+			    it->it_off, it->it_name, it->it_type, it->it_ref);
+			if (toresolve)
+				printf(": %d members", toresolve);
+			TAILQ_FOREACH(im, &it->it_members, im_next) {
+				if (im->im_refp == NULL) {
+					printf("\n%zu: %s", im->im_ref,
+					    im->im_name);
+				}
+			}
+			printf("\n");
 		}
-		printf("\n");
-	}
 #endif
+	}
 }
 
 /*
  * Merge type representation from a CU with already known types.
  *
  * This algorithm is in O(n*(m+n)) with:
- *   n = number of elements in ``otherq''
+ *   n = number of elements in ``cutq''
  *   m = number of elements in ``&itypeq''
  */
 void
-merge(struct itype_queue *otherq)
+cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
 {
 	struct itype *it, *nit;
 	struct itype *prev, *last;
@@ -304,11 +311,11 @@ merge(struct itype_queue *otherq)
 		return;
 
 	/* First ``it'' that needs a duplicate check. */
-	it = TAILQ_FIRST(otherq);
+	it = TAILQ_FIRST(cutq);
 	if (it == NULL)
 		return;
 
-	TAILQ_CONCAT(&itypeq, otherq, it_next);
+	TAILQ_CONCAT(&itypeq, cutq, it_next);
 
 	for (; it != NULL; it = nit) {
 		nit = TAILQ_NEXT(it, it_next);
@@ -368,8 +375,11 @@ merge(struct itype_queue *otherq)
 		tidx = it->it_idx;
 }
 
+/*
+ * Parse a CU.
+ */
 void
-parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
+cu_parse(struct dwcu *dcu, struct itype_queue *cutq)
 {
 	struct itype *it = NULL;
 	struct dwdie *die;
@@ -472,7 +482,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			continue;
 		}
 
-		TAILQ_INSERT_TAIL(itypeq, it, it_next);
+		TAILQ_INSERT_TAIL(cutq, it, it_next);
 	}
 }
 
