@@ -47,13 +47,13 @@ struct itype	*parse_base(struct dwdie *, size_t);
 struct itype	*parse_refers(struct dwdie *, size_t, int);
 struct itype	*parse_array(struct dwdie *, size_t);
 struct itype	*parse_enum(struct dwdie *, size_t);
-struct itype	*parse_struct(struct dwdie *, size_t, int);
+struct itype	*parse_struct(struct dwdie *, size_t, int, size_t);
 struct itype	*parse_function(struct dwdie *, size_t);
 struct itype	*parse_funcptr(struct dwdie *, size_t);
 struct itype	*parse_variable(struct dwdie *, size_t);
 
 void		 subparse_subrange(struct dwdie *, size_t, struct itype *);
-void		 subparse_member(struct dwdie *, size_t, struct itype *);
+void		 subparse_member(struct dwdie *, size_t, struct itype *, size_t);
 void		 subparse_arguments(struct dwdie *, size_t, struct itype *);
 
 size_t		 dav2val(struct dwaval *, size_t);
@@ -372,6 +372,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 	struct itype *it = NULL;
 	struct dwdie *die;
 	size_t psz = dcu->dcu_psize;
+	size_t off = dcu->dcu_offset;
 
 	SIMPLEQ_FOREACH(die, &dcu->dcu_dies, die_next) {
 		uint64_t tag = die->die_dab->dab_tag;
@@ -387,7 +388,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			it = parse_refers(die, psz, CTF_K_POINTER);
 			break;
 		case DW_TAG_structure_type:
-			it = parse_struct(die, psz, CTF_K_STRUCT);
+			it = parse_struct(die, psz, CTF_K_STRUCT, off);
 			if (it == NULL)
 				continue;
 			break;
@@ -395,7 +396,7 @@ parse_cu(struct dwcu *dcu, struct itype_queue *itypeq)
 			it = parse_refers(die, psz, CTF_K_TYPEDEF);
 			break;
 		case DW_TAG_union_type:
-			it = parse_struct(die, psz, CTF_K_UNION);
+			it = parse_struct(die, psz, CTF_K_UNION, off);
 			if (it == NULL)
 				continue;
 			break;
@@ -695,7 +696,7 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 }
 
 struct itype *
-parse_struct(struct dwdie *die, size_t psz, int type)
+parse_struct(struct dwdie *die, size_t psz, int type, size_t off)
 {
 	struct itype *it = NULL;
 	struct dwaval *dav;
@@ -720,13 +721,13 @@ parse_struct(struct dwdie *die, size_t psz, int type)
 	it = it_new(++tidx, die->die_offset, name, size, 0, 0, type,
 	    ITF_UNRESOLVED_MEMBERS);
 
-	subparse_member(die, psz, it);
+	subparse_member(die, psz, it, off);
 
 	return it;
 }
 
 void
-subparse_member(struct dwdie *die, size_t psz, struct itype *it)
+subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 {
 	struct imember *im;
 	struct dwaval *dav;
@@ -744,6 +745,8 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 	 * after it on the list.
 	 */
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
+		int64_t tag = die->die_dab->dab_tag;
+
 		if (die->die_lvl <= lvl)
 			break;
 
@@ -772,6 +775,14 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it)
 				break;
 			}
 		}
+
+		/*
+		 * When a structure is declared inside an union, we
+		 * have to generate a reference to make the resolver
+		 * happy.
+		 */
+		if ((ref == 0) && (tag == DW_TAG_structure_type))
+			ref = die->die_offset - offset;
 
 		im = xcalloc(1, sizeof(*im));
 		im->im_off = 8 * off;
