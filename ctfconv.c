@@ -75,7 +75,7 @@ struct itype_queue iobjq = TAILQ_HEAD_INITIALIZER(iobjq);
 __dead void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-d] -l label [-o outfile] file ...\n",
+	fprintf(stderr, "usage: %s [-d] -l label -o outfile file\n",
 	    getprogname());
 	exit(1);
 }
@@ -113,7 +113,10 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 1 || label == NULL)
+	if (argc != 1)
+		usage();
+
+	if (!dump && (outfile == NULL || label == NULL))
 		usage();
 
 	filename = *argv;

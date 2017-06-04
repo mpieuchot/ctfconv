@@ -18,32 +18,40 @@
 .Os
 .Sh NAME
 .Nm ctfconv
-.Nd convert DWARF data to CTF data
+.Nd generates a raw CTF section from debug data
 .Sh SYNOPSIS
 .Nm ctfconv
 .Op Fl d
 .Fl l Ar label
-.Op Fl o outfile
+.Fl o Ar outfile
 .Ar file
 .Sh DESCRIPTION
 The
 .Nm
-utility converts DWARF debug information of an
-.Xr elf 5
-file to
+utility parses DWARF debug sections of
+.Ar file
+to generate
 .Dv CTF
 data.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl d
-Display the types like they would be dumped from a
+Display types as if they would be dumped from a
 .Dv \.SUNW_ctf
 section by
 .Xr ctfdump 1 .
+.It Fl l Ar label
+Set the
+.Dv CTF
+label as
+.Ar label .
+.It Fl o Ar outfile
+Write the raw section in
+.Ar outfile .
 .El
 .Sh EXIT STATUS
 .Ex -std ctfconv
 .Sh SEE ALSO
 .Xr ctfdump 1 ,
-.Xr elf 5
+.Xr ctfstrip 1
