@@ -138,11 +138,10 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 {
 	int		 toresolve = it->it_nelems;
 	struct itype	*tmp;
+	struct imember	*im;
 
 	if ((it->it_flags & ITF_UNRESOLVED_MEMBERS) &&
 	    !TAILQ_EMPTY(&it->it_members)) {
-		struct imember	*im;
-
 		TAILQ_FOREACH(tmp, itypeq, it_next) {
 			TAILQ_FOREACH(im, &it->it_members, im_next) {
 				if (tmp->it_off == (im->im_ref + offset)) {
@@ -172,6 +171,10 @@ resolve(struct itype *it, struct itype_queue *itypeq, size_t offset)
 		    it->it_name, it->it_type, it->it_ref);
 		if (toresolve)
 			printf(": %d members", toresolve);
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
+			if (im->im_refp == NULL)
+				printf("\n%zu: %s", im->im_ref, im->im_name);
+		}
 		printf("\n");
 	}
 #endif
