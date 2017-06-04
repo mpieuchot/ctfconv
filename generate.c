@@ -272,7 +272,7 @@ void
 imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 {
 	struct itype		*it;
-	struct ctf_lblent	 ctl;
+	struct ctf_lblent	 lbl;
 
 	memset(imcs, 0, sizeof(*imcs));
 
@@ -286,35 +286,27 @@ imcs_generate(struct imcs *imcs, struct ctf_header *cth, const char *label)
 	/* Add empty string */
 	dbuf_copy(&imcs->stab, "", 1);
 
-	/* FIXME */
+	/* We don't use parent label */
 	cth->cth_parlabel = 0;
 	cth->cth_parname = 0;
 
-	/*
-	 * Insert label
-	 */
+	/* Insert a single label for all types. */
 	cth->cth_lbloff = 0;
+	lbl.ctl_label = imcs_add_string(imcs, label);
+	lbl.ctl_typeidx = tidx;
+	dbuf_copy(&imcs->body, &lbl, sizeof(lbl));
 
-	ctl.ctl_label = imcs_add_string(imcs, label);
-	ctl.ctl_typeidx = 42; /* FIXME */
-
-	/* Fill the buffer */
-	dbuf_copy(&imcs->body, &ctl, sizeof(ctl));
-
+	/* Insert objects */
 	cth->cth_objtoff = dbuf_pad(&imcs->body, 2);
 	TAILQ_FOREACH(it, &iobjq, it_symb)
 		imcs_add_obj(imcs, it);
 
-	/*
-	 * Insert functions
-	 */
+	/* Insert functions */
 	cth->cth_funcoff = dbuf_pad(&imcs->body, 2);
 	TAILQ_FOREACH(it, &ifuncq, it_symb)
 		imcs_add_func(imcs, it);
 
-	/*
-	 * Insert types
-	 */
+	/* Insert types */
 	cth->cth_typeoff = dbuf_pad(&imcs->body, 4);
 	TAILQ_FOREACH(it, &itypeq, it_next) {
 		if (it->it_flags & (ITF_FUNC|ITF_OBJECT))

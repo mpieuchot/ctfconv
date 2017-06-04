@@ -68,6 +68,7 @@ RB_HEAD(isymb_tree, itype);
 /* lists of types, functions & data objects */
 extern struct itype_queue itypeq, ifuncq, iobjq;
 extern struct isymb_tree isymbt;	    /* tree of symbols */
+extern uint16_t tidx;		    	    /* type index */
 extern uint16_t long_tidx;		    /* type ID for "long" */
 
 RB_PROTOTYPE(isymb_tree, itype, it_node, it_name_cmp);
