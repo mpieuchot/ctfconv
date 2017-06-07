@@ -39,8 +39,33 @@
 
 #define VOID_OFFSET	1	/* Fake offset for generating "void" type. */
 
-void		 cu_parse(struct dwcu *, struct itype_queue *);
-void		 cu_resolve(struct dwcu *, struct itype_queue *);
+/*
+ * Tree used to resolve per-CU types based on their offset in
+ * the abbrev section.
+ */
+RB_HEAD(ioff_tree, itype);
+
+/*
+ * Per-type trees used to merge exsiting types with the ones of
+ * a newly parsed CU.
+ */
+RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
+
+/*
+ * Tree of symbols used to build a list matching the order of
+ * the ELF symbol table.
+ */
+struct isymb_tree	 isymbt;
+
+struct itype		*void_it;
+uint16_t		 tidx, fidx, oidx;	/* type, func & object IDs */
+uint16_t		 long_tidx;		/* index of "long", for array */
+
+
+void		 cu_parse(struct dwcu *, struct itype_queue *,
+		     struct ioff_tree *);
+void		 cu_resolve(struct dwcu *, struct itype_queue *,
+		     struct ioff_tree *);
 void		 cu_reference(struct dwcu *, struct itype_queue *);
 void		 cu_merge(struct dwcu *, struct itype_queue *);
 
@@ -67,18 +92,13 @@ void		 it_reference(struct itype *);
 void		 it_free(struct itype *);
 int		 it_cmp(struct itype *, struct itype *);
 int		 it_name_cmp(struct itype *, struct itype *);
+int		 it_off_cmp(struct itype *, struct itype *);
 void		 ir_add(struct itype *, struct itype *);
 void		 ir_purge(struct itype *);
 
-RB_HEAD(itype_tree, itype)	 itypet[CTF_K_MAX];
-struct isymb_tree		 isymbt;
-struct itype			*void_it;
-uint16_t			 tidx, fidx, oidx; /* type, func & object IDs */
-uint16_t			 long_tidx;	/* index of "long", for array */
-
-
 RB_GENERATE(itype_tree, itype, it_node, it_cmp);
 RB_GENERATE(isymb_tree, itype, it_node, it_name_cmp);
+RB_GENERATE(ioff_tree, itype, it_node, it_off_cmp);
 
 /*
  * Construct a list of internal type and functions based on DWARF
@@ -93,6 +113,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 	struct dwbuf		 info = { .buf = infobuf, .len = infolen };
 	struct dwbuf		 abbrev = { .buf = abbuf, .len = ablen };
 	struct dwcu		*dcu = NULL;
+	struct ioff_tree	 cu_iofft;
 	struct itype_queue	 cu_itypeq;
 	struct itype		*it;
 	int			 i;
@@ -107,12 +128,14 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	while (dw_cu_parse(&info, &abbrev, infolen, &dcu) == 0) {
 		TAILQ_INIT(&cu_itypeq);
+		RB_INIT(&cu_iofft);
 
 		/* Parse this CU */
-		cu_parse(dcu, &cu_itypeq);
+		cu_parse(dcu, &cu_itypeq, &cu_iofft);
 
 		/* Resolve its types. */
-		cu_resolve(dcu, &cu_itypeq);
+		cu_resolve(dcu, &cu_itypeq, &cu_iofft);
+		assert(RB_EMPTY(&cu_iofft));
 
 		/* Mark used type as such. */
 		cu_reference(dcu, &cu_itypeq);
@@ -257,10 +280,21 @@ it_name_cmp(struct itype *a, struct itype *b)
 	return ((a->it_flags|ITF_MASK) - (b->it_flags|ITF_MASK));
 }
 
+int
+it_off_cmp(struct itype *a, struct itype *b)
+{
+	return a->it_off - b->it_off;
+}
+
 void
 ir_add(struct itype *it, struct itype *tmp)
 {
 	struct itref *ir;
+
+	SIMPLEQ_FOREACH(ir, &tmp->it_refs, ir_next) {
+		if (ir->ir_itp == it)
+			return;
+	}
 
 	ir = xmalloc(sizeof(*ir));
 	ir->ir_itp = it;
@@ -283,53 +317,42 @@ ir_purge(struct itype *it)
  * of elements in ``cutq''.
  */
 void
-cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
+cu_resolve(struct dwcu *dcu, struct itype_queue *cutq, struct ioff_tree *cuot)
 {
-	struct itype	*it, *tmp;
+	struct itype	*it, *ref, tmp;
 	struct imember	*im;
-	unsigned int	 toresolve, inserted;
+	unsigned int	 toresolve;
 	size_t		 off = dcu->dcu_offset;
 
 	TAILQ_FOREACH(it, cutq, it_next) {
 		if (!(it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)))
 			continue;
 
-		/* All members need to be resolved. */
-		toresolve = it->it_nelems;
-
-		TAILQ_FOREACH(tmp, cutq, it_next) {
-			inserted = 0;
-
-			if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
-				TAILQ_FOREACH(im, &it->it_members, im_next) {
-					if (tmp->it_off == (im->im_ref + off)) {
-						im->im_refp = tmp;
-						if (!inserted) {
-							inserted = 1;
-							ir_add(it, tmp);
-						}
-						toresolve--;
-					}
-				}
-				if (toresolve == 0)
-					it->it_flags &= ~ITF_UNRES_MEMB;
+		if (it->it_flags & ITF_UNRES) {
+			tmp.it_off = it->it_ref + off;
+			ref = RB_FIND(ioff_tree, cuot, &tmp);
+			if (ref != NULL) {
+				it->it_refp = ref;
+				ir_add(it, ref);
+				it->it_flags &= ~ITF_UNRES;
 			}
-
-			if (it->it_flags & ITF_UNRES) {
-				if (tmp->it_off == (it->it_ref + off)) {
-					it->it_refp = tmp;
-					if (!inserted) {
-						inserted = 1;
-						ir_add(it, tmp);
-					}
-					it->it_flags &= ~ITF_UNRES;
-				}
-			}
-
-			if (!(it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)))
-				break;
 		}
 
+		/* All members need to be resolved. */
+		toresolve = it->it_nelems;
+		if ((it->it_flags & ITF_UNRES_MEMB) && toresolve > 0) {
+			TAILQ_FOREACH(im, &it->it_members, im_next) {
+				tmp.it_off = im->im_ref + off;
+				ref = RB_FIND(ioff_tree, cuot, &tmp);
+				if (ref != NULL) {
+					im->im_refp = ref;
+					ir_add(it, ref);
+					toresolve--;
+				}
+			}
+			if (toresolve == 0)
+				it->it_flags &= ~ITF_UNRES_MEMB;
+		}
 #ifdef DEBUG
 		if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
 			printf("0x%zx: %s type=%d unresolved 0x%llx",
@@ -346,6 +369,9 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq)
 		}
 #endif
 	}
+
+	RB_FOREACH_SAFE(it, ioff_tree, cuot, ref)
+		RB_REMOVE(ioff_tree, cuot, it);
 }
 
 void
@@ -459,12 +485,14 @@ cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
  * Parse a CU.
  */
 void
-cu_parse(struct dwcu *dcu, struct itype_queue *cutq)
+cu_parse(struct dwcu *dcu, struct itype_queue *cutq, struct ioff_tree *cuot)
 {
 	struct itype *it = NULL;
 	struct dwdie *die;
 	size_t psz = dcu->dcu_psize;
 	size_t off = dcu->dcu_offset;
+
+	assert(RB_EMPTY(cuot));
 
 	SIMPLEQ_FOREACH(die, &dcu->dcu_dies, die_next) {
 		uint64_t tag = die->die_dab->dab_tag;
@@ -563,6 +591,7 @@ cu_parse(struct dwcu *dcu, struct itype_queue *cutq)
 		}
 
 		TAILQ_INSERT_TAIL(cutq, it, it_next);
+		RB_INSERT(ioff_tree, cuot, it);
 	}
 }
 
