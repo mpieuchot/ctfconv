@@ -24,6 +24,11 @@
 
 #include "dw.h"
 #include "dwarf.h"
+#include "pool.h"
+
+#ifndef NOPOOL
+struct pool dcu_pool, die_pool, dav_pool, dab_pool, dat_pool;
+#endif /* NOPOOL */
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
@@ -288,7 +293,7 @@ dw_attr_parse(struct dwbuf *dwbuf, struct dwattr *dat, uint8_t psz,
 			return ELOOP;
 	}
 
-	dav = calloc(1, sizeof(*dav));
+	dav = pzalloc(&dav_pool, sizeof(*dav));
 	if (dav == NULL)
 		return ENOMEM;
 
@@ -361,7 +366,7 @@ dw_attr_parse(struct dwbuf *dwbuf, struct dwattr *dat, uint8_t psz,
 	}
 
 	if (error) {
-		free(dav);
+		pfree(&dav_pool, dav);
 		return error;
 	}
 
@@ -376,7 +381,7 @@ dw_attr_purge(struct dwaval_queue *davq)
 
 	while ((dav = SIMPLEQ_FIRST(davq)) != NULL) {
 		SIMPLEQ_REMOVE_HEAD(davq, dav_next);
-		free(dav);
+		pfree(&dav_pool, dav);
 	}
 
 	SIMPLEQ_INIT(davq);
@@ -412,7 +417,7 @@ dw_die_parse(struct dwbuf *dwbuf, size_t nextoff, uint8_t psz,
 		if (dab == NULL)
 			return ESRCH;
 
-		die = malloc(sizeof(*die));
+		die = pmalloc(&die_pool, sizeof(*die));
 		if (die == NULL)
 			return ENOMEM;
 
@@ -446,7 +451,7 @@ dw_die_purge(struct dwdie_queue *dieq)
 	while ((die = SIMPLEQ_FIRST(dieq)) != NULL) {
 		SIMPLEQ_REMOVE_HEAD(dieq, die_next);
 		dw_attr_purge(&die->die_avals);
-		free(die);
+		pfree(&die_pool, die);
 	}
 
 	SIMPLEQ_INIT(dieq);
@@ -470,7 +475,7 @@ dw_ab_parse(struct dwbuf *abseg, struct dwabbrev_queue *dabq)
 		    dw_read_u8(abseg, &children))
 			return -1;
 
-		dab = malloc(sizeof(*dab));
+		dab = pmalloc(&dab_pool, sizeof(*dab));
 		if (dab == NULL)
 			return ENOMEM;
 
@@ -492,7 +497,7 @@ dw_ab_parse(struct dwbuf *abseg, struct dwabbrev_queue *dabq)
 			if ((attr == 0) && (form == 0))
 				break;
 
-			dat = malloc(sizeof(*dat));
+			dat = pmalloc(&dat_pool, sizeof(*dat));
 			if (dat == NULL)
 				return ENOMEM;
 
@@ -517,10 +522,10 @@ dw_dabq_purge(struct dwabbrev_queue *dabq)
 		SIMPLEQ_REMOVE_HEAD(dabq, dab_next);
 		while ((dat = SIMPLEQ_FIRST(&dab->dab_attrs)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(&dab->dab_attrs, dat_next);
-			free(dat);
+			pfree(&dat_pool, dat);
 		}
 
-		free(dab);
+		pfree(&dab_pool, dab);
 	}
 
 	SIMPLEQ_INIT(dabq);
@@ -538,6 +543,18 @@ dw_cu_parse(struct dwbuf *info, struct dwbuf *abbrev, size_t seglen,
 	uint16_t	 version;
 	uint8_t		 psz;
 	int		 error;
+#ifndef NOPOOL
+	static int 	 dw_pool_inited = 0;
+
+	if (!dw_pool_inited) {
+		pool_init(&dcu_pool, "dcu", sizeof(struct dwcu));
+		pool_init(&dab_pool, "dab", sizeof(struct dwabbrev));
+		pool_init(&dat_pool, "dat", sizeof(struct dwattr));
+		pool_init(&die_pool, "die", sizeof(struct dwdie));
+		pool_init(&dav_pool, "dav", sizeof(struct dwaval));
+		dw_pool_inited = 1;
+	}
+#endif /* NOPOOL */
 
 	if (info->len == 0 || abbrev->len == 0)
 		return EINVAL;
@@ -571,7 +588,7 @@ dw_cu_parse(struct dwbuf *info, struct dwbuf *abbrev, size_t seglen,
 	if (version != 2)
 		return ENOTSUP;
 
-	dcu = malloc(sizeof(*dcu));
+	dcu = pmalloc(&dcu_pool, sizeof(*dcu));
 	if (dcu == NULL)
 		return ENOMEM;
 
@@ -612,7 +629,7 @@ dw_dcu_free(struct dwcu *dcu)
 
 	dw_die_purge(&dcu->dcu_dies);
 	dw_dabq_purge(&dcu->dcu_abbrevs);
-	free(dcu);
+	pfree(&dcu_pool, dcu);
 }
 
 int

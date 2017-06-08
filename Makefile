@@ -1,6 +1,7 @@
 
 PROG=		ctfconv
-SRCS=		ctfconv.c parse.c elf.c dw.c generate.c hash.c xmalloc.c
+SRCS=		ctfconv.c parse.c elf.c dw.c generate.c hash.c xmalloc.c \
+		pool.c
 
 CFLAGS+=	-W -Wall -Wstrict-prototypes -Wno-unused -Wunused-variable
 

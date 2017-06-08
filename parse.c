@@ -34,6 +34,15 @@
 #include "xmalloc.h"
 #include "dwarf.h"
 #include "dw.h"
+#include "pool.h"
+
+#ifdef DEBUG
+#include <stdio.h>
+#endif
+
+#ifndef NOPOOL
+struct pool it_pool, im_pool, ir_pool;
+#endif /* NOPOOL */
 
 #define DPRINTF(x...)	do { /*printf(x)*/ } while (0)
 
@@ -62,6 +71,7 @@ uint16_t		 tidx, fidx, oidx;	/* type, func & object IDs */
 uint16_t		 long_tidx;		/* index of "long", for array */
 
 
+void		 cu_stat(void);
 void		 cu_parse(struct dwcu *, struct itype_queue *,
 		     struct ioff_tree *);
 void		 cu_resolve(struct dwcu *, struct itype_queue *,
@@ -141,6 +151,11 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		/* Mark used type as such. */
 		cu_reference(dcu, &cu_itypeq);
 
+#ifdef DEBUG
+		/* Dump statistics for current CU. */
+		cu_stat();
+#endif
+
 		/* Merge them with the common type list. */
 		cu_merge(dcu, &cu_itypeq);
 
@@ -164,8 +179,18 @@ it_new(uint64_t index, size_t off, const char *name, uint32_t size,
     uint16_t enc, uint64_t ref, uint16_t type, unsigned int flags)
 {
 	struct itype *it;
+#ifndef NOPOOL
+	static int it_pool_inited = 0;
 
-	it = xcalloc(1, sizeof(*it));
+	if (!it_pool_inited) {
+		pool_init(&it_pool, "it", sizeof(struct itype));
+		pool_init(&im_pool, "im", sizeof(struct imember));
+		pool_init(&ir_pool, "ir", sizeof(struct itref));
+		it_pool_inited = 1;
+	}
+#endif
+
+	it = pzalloc(&it_pool, sizeof(*it));
 	TAILQ_INIT(&it->it_members);
 	SIMPLEQ_INIT(&it->it_refs);
 	it->it_flags = flags;
@@ -201,7 +226,7 @@ it_dup(struct itype *it)
 	copit->it_nelems = it->it_nelems;
 
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
-		copim = xcalloc(1, sizeof(*im));
+		copim = pzalloc(&im_pool, sizeof(*im));
 		strlcpy(copim->im_name, im->im_name, ITNAME_MAX);
 		copim->im_ref = im->im_ref;
 		copim->im_off = im->im_off;
@@ -246,11 +271,11 @@ it_free(struct itype *it)
 
 	while ((im = TAILQ_FIRST(&it->it_members)) != NULL) {
 		TAILQ_REMOVE(&it->it_members, im, im_next);
-		free(im);
+		pfree(&im_pool, im);
 	}
 
 	ir_purge(it);
-	free(it);
+	pfree(&it_pool, it);
 }
 
 /*
@@ -312,7 +337,7 @@ ir_add(struct itype *it, struct itype *tmp)
 			return;
 	}
 
-	ir = xmalloc(sizeof(*ir));
+	ir = pmalloc(&ir_pool, sizeof(*ir));
 	ir->ir_itp = it;
 	SIMPLEQ_INSERT_TAIL(&tmp->it_refs, ir, ir_next);
 }
@@ -324,10 +349,17 @@ ir_purge(struct itype *it)
 
 	while ((ir = SIMPLEQ_FIRST(&it->it_refs)) != NULL) {
 		SIMPLEQ_REMOVE_HEAD(&it->it_refs, ir_next);
-		free(ir);
+		pfree(&ir_pool, ir);
 	}
 }
 
+void
+cu_stat(void)
+{
+#ifndef NOPOOL
+	pool_dump();
+#endif
+}
 /*
  * Worst case it's a O(n*n) resolution lookup, with ``n'' being the number
  * of elements in ``cutq''.
@@ -369,7 +401,7 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq, struct ioff_tree *cuot)
 			if (toresolve == 0)
 				it->it_flags &= ~ITF_UNRES_MEMB;
 		}
-#ifdef DEBUG
+#if defined(DEBUG)
 		if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
 			printf("0x%zx: %s type=%d unresolved 0x%llx",
 			    it->it_off, it_name(it), it->it_type, it->it_ref);
@@ -383,7 +415,7 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq, struct ioff_tree *cuot)
 			}
 			printf("\n");
 		}
-#endif
+#endif /* defined(DEBUG) */
 	}
 
 	RB_FOREACH_SAFE(it, ioff_tree, cuot, ref)
@@ -450,7 +482,7 @@ cu_merge(struct dwcu *dcu, struct itype_queue *cutq)
 				it = ir->ir_itp;
 
 				SIMPLEQ_REMOVE_HEAD(&old->it_refs, ir_next);
-				free(ir);
+				pfree(&ir_pool, ir);
 
 				if (it->it_refp == old)
 					it->it_refp = prev;
@@ -980,7 +1012,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 		if ((ref == 0) && (tag == DW_TAG_structure_type))
 			ref = die->die_offset - offset;
 
-		im = xcalloc(1, sizeof(*im));
+		im = pzalloc(&im_pool, sizeof(*im));
 		im->im_off = 8 * off;
 		im->im_ref = ref;
 		if (name == NULL) {
@@ -1053,7 +1085,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 			}
 		}
 
-		im = xcalloc(1, sizeof(*im));
+		im = pzalloc(&im_pool, sizeof(*im));
 		im->im_ref = ref;
 		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
