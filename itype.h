@@ -15,6 +15,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#ifndef _ITTYPE_H_
+#define _ITTYPE_H_
+
+#define ITNAME_MAX	64
+
 struct imember;
 struct itref;
 
@@ -38,7 +43,7 @@ struct itype {
 
 	struct itype		*it_refp;   /* itype: resolved type */
 
-	char			*it_name;   /* CTF: type name */
+	char			 it_name[ITNAME_MAX];/* CTF: type name */
 	uint32_t		 it_size;   /* CTF: size in byte or bits */
 	uint32_t		 it_nelems; /* CTF: # of members or arguments */
 	uint16_t		 it_enc;    /* CTF: base type encoding */
@@ -54,6 +59,7 @@ struct itype {
 #define	ITF_VARARGS		 0x10	    /* takes varargs */
 #define	ITF_INSERTED		 0x20	    /* already found/inserted */
 #define	ITF_USED		 0x40	    /* referenced in the current CU */
+#define	ITF_ANON		 0x80	    /* type without name */
 #define	ITF_MASK		(ITF_INSERTED|ITF_USED)
 };
 
@@ -62,10 +68,12 @@ struct itype {
  */
 struct imember {
 	TAILQ_ENTRY(imember)	 im_next;
-	const char		*im_name;   /* struct or union field name */
+	char			 im_name[ITNAME_MAX]; /* struct field name */
 	size_t			 im_ref;    /* CU offset of the field type */
 	size_t			 im_off;    /* field offset in struct/union */
 	struct itype		*im_refp;   /* resolved CTF type */
+	unsigned int		 im_flags;  /* parser flags */
+#define	ITM_ANON		 0x01	    /* member without name */
 };
 
 /*
@@ -89,3 +97,6 @@ extern uint16_t long_tidx;		    /* type ID for "long" */
 RB_PROTOTYPE(isymb_tree, itype, it_node, it_name_cmp);
 
 struct itype *it_dup(struct itype *);
+const char *it_name(struct itype *);
+
+#endif /*_ITTYPE_H_ */

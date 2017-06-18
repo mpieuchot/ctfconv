@@ -270,9 +270,9 @@ elf_sort(void)
 		 * FIXME: only skip local copies.
 		 */
 		sname = xstrdup(strtab + st->st_name);
-		tmp.it_name = strtok(sname, ".");
+		strlcpy(tmp.it_name, strtok(sname, "."), ITNAME_MAX);
 		it = RB_FIND(isymb_tree, &isymbt, &tmp);
-		tmp.it_name = (char *)(strtab + st->st_name);
+		strlcpy(tmp.it_name, (strtab + st->st_name), ITNAME_MAX);
 		free(sname);
 
 		if (it == NULL) {
@@ -280,13 +280,13 @@ elf_sort(void)
 			it = it_dup(&tmp);
 			it->it_refp = it;
 #ifdef DEBUG
-			warnx("symbol not found: %s", it->it_name);
+			warnx("symbol not found: %s", it_name(it));
 #endif
 		}
 
 		if (it->it_flags & ITF_INSERTED) {
 #ifdef DEBUG
-			warnx("%s: already inserted", it->it_name);
+			warnx("%s: already inserted", it_name(it));
 #endif
 			it = it_dup(it);
 		}
@@ -300,6 +300,18 @@ elf_sort(void)
 		else
 			TAILQ_INSERT_TAIL(&iobjq, it, it_symb);
 	}
+}
+
+const char *
+type_name(struct itype *it)
+{
+	const char *name;
+
+	name = it_name(it);
+	if (name == NULL)
+		return "(anon)";
+
+	return name;
 }
 
 /* Display parsed types a la ctfdump(1) */
@@ -318,7 +330,7 @@ dump_type(struct itype *it)
 	case CTF_K_ARRAY:
 	case CTF_K_FUNCTION:
 		if (it->it_refp == NULL) {
-			printf("unresolved: %s type=%d\n", it->it_name,
+			printf("unresolved: %s type=%d\n", it_name(it),
 			    it->it_type);
 			return;
 		}
@@ -333,58 +345,52 @@ dump_type(struct itype *it)
 		printf("  [%u] %s %s encoding=%s offset=0 bits=%u\n",
 		    it->it_idx,
 		    (it->it_type == CTF_K_INTEGER) ? "INTEGER" : "FLOAT",
-		    it->it_name, ctf_enc2name(it->it_enc), it->it_size);
+		    it_name(it), ctf_enc2name(it->it_enc), it->it_size);
 		break;
 	case CTF_K_POINTER:
 		printf("  <%u> POINTER %s refers to %u\n", it->it_idx,
-		    (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refp->it_idx);
+		    type_name(it), it->it_refp->it_idx);
 		break;
 	case CTF_K_TYPEDEF:
 		printf("  <%u> TYPEDEF %s refers to %u\n",
-		    it->it_idx, it->it_name, it->it_refp->it_idx);
+		    it->it_idx, it_name(it), it->it_refp->it_idx);
 		break;
 	case CTF_K_VOLATILE:
 		printf("  <%u> VOLATILE %s refers to %u\n", it->it_idx,
-		    (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refp->it_idx);
+		    type_name(it), it->it_refp->it_idx);
 		break;
 	case CTF_K_CONST:
 		printf("  <%u> CONST %s refers to %u\n", it->it_idx,
-		    (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refp->it_idx);
+		    type_name(it), it->it_refp->it_idx);
 		break;
 	case CTF_K_RESTRICT:
 		printf("  <%u> RESTRICT %s refers to %u\n", it->it_idx,
-		    it->it_name, it->it_refp->it_idx);
+		    it_name(it), it->it_refp->it_idx);
 		break;
 	case CTF_K_ARRAY:
 		printf("  [%u] ARRAY %s content: %u index: %u nelems: %u\n",
-		    it->it_idx, (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_refp->it_idx, long_tidx, it->it_nelems);
+		    it->it_idx, type_name(it), it->it_refp->it_idx, long_tidx,
+		    it->it_nelems);
 		printf("\n");
 		break;
 	case CTF_K_STRUCT:
 	case CTF_K_UNION:
 		printf("  [%u] %s %s (%u bytes)\n", it->it_idx,
 		    (it->it_type == CTF_K_STRUCT) ? "STRUCT" : "UNION",
-		    (it->it_name != NULL) ? it->it_name : "(anon)",
-		    it->it_size);
+		    type_name(it), it->it_size);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
 			printf("\t%s type=%u off=%zd\n",
-			    (im->im_name != NULL) ? im->im_name : "unknown",
+			    (im->im_flags & ITM_ANON) ? "unknown" : im->im_name,
 			    im->im_refp->it_idx, im->im_off);
 		}
 		printf("\n");
 		break;
 	case CTF_K_ENUM:
-		printf("  [%u] ENUM %s\n", it->it_idx,
-		    (it->it_name != NULL) ? it->it_name : "(anon)");
-		printf("\n");
+		printf("  [%u] ENUM %s\n\n", it->it_idx, type_name(it));
 		break;
 	case CTF_K_FUNCTION:
 		printf("  [%u] FUNCTION (%s) returns: %u args: (",
-		    it->it_idx, (it->it_name != NULL) ? it->it_name : "anon",
+		    it->it_idx, (it_name(it) != NULL) ? it_name(it) : "anon",
 		    it->it_refp->it_idx);
 		TAILQ_FOREACH(im, &it->it_members, im_next) {
 			printf("%u%s", im->im_refp->it_idx,
@@ -425,7 +431,7 @@ dump_obj(struct itype *it, int *idx)
 	(*idx)++;
 
 	l = printf("  [%u] %u", (*idx), it->it_refp->it_idx);
-	printf("%*s %s (%llu)\n", 14 - l, "", it->it_name, it->it_ref);
+	printf("%*s %s (%llu)\n", 14 - l, "", it_name(it), it->it_ref);
 }
 
 const char *

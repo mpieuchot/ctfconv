@@ -186,7 +186,7 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	kind = it->it_type;
 	root = 0;
 
-	ctt.ctt_name = imcs_add_string(imcs, it->it_name);
+	ctt.ctt_name = imcs_add_string(imcs, it_name(it));
 	ctt.ctt_info = (kind << 11) | (root << 10) | (vlen & CTF_MAX_VLEN);
 
 	/* Base types don't have reference, typedef & pointer don't have size */

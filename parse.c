@@ -86,8 +86,8 @@ size_t		 dav2val(struct dwaval *, size_t);
 const char	*dav2str(struct dwaval *);
 const char	*enc2name(unsigned short);
 
-struct itype	*it_new(uint64_t, size_t, char *, uint32_t, uint16_t, uint64_t,
-		     uint16_t, unsigned int);
+struct itype	*it_new(uint64_t, size_t, const char *, uint32_t, uint16_t,
+		     uint64_t, uint16_t, unsigned int);
 void		 it_reference(struct itype *);
 void		 it_free(struct itype *);
 int		 it_cmp(struct itype *, struct itype *);
@@ -122,7 +122,7 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 		RB_INIT(&itypet[i]);
 	RB_INIT(&isymbt);
 
-	void_it = it_new(++tidx, VOID_OFFSET, xstrdup("void"), 0,
+	void_it = it_new(++tidx, VOID_OFFSET, "void", 0,
 	    CTF_INT_SIGNED, 0, CTF_K_INTEGER, 0);
 	TAILQ_INSERT_TAIL(&itypeq, void_it, it_next);
 
@@ -148,10 +148,10 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 
 	/* We force array's index type to be 'long', for that we need its ID. */
 	RB_FOREACH(it, itype_tree, &itypet[CTF_K_INTEGER]) {
-		if (it->it_name == NULL || it->it_size != (8 * sizeof(long)))
+		if (it_name(it) == NULL || it->it_size != (8 * sizeof(long)))
 			continue;
 
-		if (strcmp(it->it_name, "unsigned") == 0) {
+		if (strcmp(it_name(it), "unsigned") == 0) {
 			long_tidx = it->it_idx;
 			break;
 		}
@@ -159,8 +159,8 @@ dwarf_parse(const char *infobuf, size_t infolen, const char *abbuf,
 }
 
 struct itype *
-it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
-    uint64_t ref, uint16_t type, unsigned int flags)
+it_new(uint64_t index, size_t off, const char *name, uint32_t size,
+    uint16_t enc, uint64_t ref, uint16_t type, unsigned int flags)
 {
 	struct itype *it;
 
@@ -173,8 +173,16 @@ it_new(uint64_t index, size_t off, char *name, uint32_t size, uint16_t enc,
 	it->it_idx = index;
 	it->it_enc = enc;
 	it->it_type = type;
-	it->it_name = name;
 	it->it_size = size;
+
+	if (name == NULL) {
+		it->it_flags |= ITF_ANON;
+	} else {
+		size_t n;
+
+		if ((n = strlcpy(it->it_name, name, ITNAME_MAX)) > ITNAME_MAX)
+			warnx("name %s too long %zd > %d", name, n, ITNAME_MAX);
+	}
 
 	return it;
 }
@@ -185,15 +193,15 @@ it_dup(struct itype *it)
 	struct imember *copim, *im;
 	struct itype *copit;
 
-	copit = it_new(it->it_idx, it->it_off, xstrdup(it->it_name),
-	    it->it_size, it->it_enc, it->it_ref, it->it_type, it->it_flags);
+	copit = it_new(it->it_idx, it->it_off, it_name(it), it->it_size,
+	    it->it_enc, it->it_ref, it->it_type, it->it_flags);
 
 	copit->it_refp = it->it_refp;
 	copit->it_nelems = it->it_nelems;
 
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
 		copim = xcalloc(1, sizeof(*im));
-		copim->im_name = im->im_name;
+		strlcpy(copim->im_name, im->im_name, ITNAME_MAX);
 		copim->im_ref = im->im_ref;
 		copim->im_off = im->im_off;
 		copim->im_refp = im->im_refp;
@@ -201,6 +209,15 @@ it_dup(struct itype *it)
 	}
 
 	return copit;
+}
+
+const char *
+it_name(struct itype *it)
+{
+	if (!(it->it_flags & ITF_ANON))
+		return it->it_name;
+
+	return NULL;
 }
 
 void
@@ -233,7 +250,6 @@ it_free(struct itype *it)
 	}
 
 	ir_purge(it);
-	free(it->it_name);
 	free(it);
 }
 
@@ -255,12 +271,12 @@ it_cmp(struct itype *a, struct itype *b)
 		return diff;
 
 	/* Match by name */
-	if ((a->it_name != NULL) && (b->it_name != NULL))
-		return strcmp(a->it_name, b->it_name);
+	if (!(a->it_flags & ITF_ANON) && !(b->it_flags & ITF_ANON))
+		return strcmp(it_name(a), it_name(b));
 
 	/* Only one of them is anonym */
-	if (a->it_name != b->it_name)
-		return (a->it_name == NULL) ? -1 : 1;
+	if ((a->it_flags & ITF_ANON) != (b->it_flags & ITF_ANON))
+		return (a->it_flags & ITF_ANON) ? -1 : 1;
 
 	/* Match by reference */
 	if ((a->it_refp != NULL) && (b->it_refp != NULL))
@@ -274,7 +290,7 @@ it_name_cmp(struct itype *a, struct itype *b)
 {
 	int diff;
 
-	if ((diff = strcmp(a->it_name, b->it_name)) != 0)
+	if ((diff = strcmp(it_name(a), it_name(b))) != 0)
 		return diff;
 
 	return ((a->it_flags|ITF_MASK) - (b->it_flags|ITF_MASK));
@@ -356,7 +372,7 @@ cu_resolve(struct dwcu *dcu, struct itype_queue *cutq, struct ioff_tree *cuot)
 #ifdef DEBUG
 		if (it->it_flags & (ITF_UNRES|ITF_UNRES_MEMB)) {
 			printf("0x%zx: %s type=%d unresolved 0x%llx",
-			    it->it_off, it->it_name, it->it_type, it->it_ref);
+			    it->it_off, it_name(it), it->it_type, it->it_ref);
 			if (toresolve)
 				printf(": %d members", toresolve);
 			TAILQ_FOREACH(im, &it->it_members, im_next) {
@@ -671,7 +687,7 @@ parse_base(struct dwdie *die, size_t psz)
 		return (NULL);
 	}
 
-	it = it_new(++tidx, die->die_offset, xstrdup(enc2name(enc)), bits,
+	it = it_new(++tidx, die->die_offset, enc2name(enc), bits,
 	    encoding, 0, type, 0);
 
 	return it;
@@ -682,13 +698,13 @@ parse_refers(struct dwdie *die, size_t psz, int type)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t ref = 0, size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -722,13 +738,13 @@ parse_array(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -752,7 +768,7 @@ parse_enum(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -762,7 +778,7 @@ parse_enum(struct dwdie *die, size_t psz)
 			assert(size < UINT_MAX);
 			break;
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
@@ -821,7 +837,7 @@ parse_struct(struct dwdie *die, size_t psz, int type, size_t off)
 {
 	struct itype *it = NULL;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t size = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
@@ -831,7 +847,7 @@ parse_struct(struct dwdie *die, size_t psz, int type, size_t off)
 			assert(size < UINT_MAX);
 			break;
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
@@ -851,7 +867,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 {
 	struct imember *im;
 	struct dwaval *dav;
-	const char *name = NULL;
+	const char *name;
 	size_t off = 0, ref = 0, bits = 0;
 	uint8_t lvl = die->die_lvl;
 
@@ -867,6 +883,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
 		int64_t tag = die->die_dab->dab_tag;
 
+		name = NULL;
 		if (die->die_lvl <= lvl)
 			break;
 
@@ -879,7 +896,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 			switch (dav->dav_dat->dat_attr) {
 			case DW_AT_name:
-				name = xstrdup(dav2str(dav));
+				name = dav2str(dav);
 				break;
 			case DW_AT_type:
 				ref = dav2val(dav, psz);
@@ -909,7 +926,16 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 		im = xcalloc(1, sizeof(*im));
 		im->im_off = 8 * off;
 		im->im_ref = ref;
-		im->im_name = name;
+		if (name == NULL) {
+			im->im_flags |= ITM_ANON;
+		} else {
+			size_t n;
+
+			n = strlcpy(im->im_name, name, ITNAME_MAX);
+			if (n > ITNAME_MAX)
+				warnx("name %s too long %zd > %d", name, n,
+				    ITNAME_MAX);
+		}
 
 		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
@@ -983,13 +1009,13 @@ parse_function(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -999,7 +1025,6 @@ parse_function(struct dwdie *die, size_t psz)
 			 * Skip second empty definition for inline
 			 * functions.
 			 */
-			free(name);
 			return NULL;
 		default:
 			DPRINTF("%s\n", dw_at2name(dav->dav_dat->dat_attr));
@@ -1027,13 +1052,13 @@ parse_funcptr(struct dwdie *die, size_t psz)
 {
 	struct itype *it;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t ref = 0;
 
 	SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
 		switch (dav->dav_dat->dat_attr) {
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
@@ -1064,7 +1089,7 @@ parse_variable(struct dwdie *die, size_t psz)
 {
 	struct itype *it = NULL;
 	struct dwaval *dav;
-	char *name = NULL;
+	const char *name = NULL;
 	size_t ref = 0;
 	int declaration = 0;
 
@@ -1074,7 +1099,7 @@ parse_variable(struct dwdie *die, size_t psz)
 			declaration = dav2val(dav, psz);
 			break;
 		case DW_AT_name:
-			name = xstrdup(dav2str(dav));
+			name = dav2str(dav);
 			break;
 		case DW_AT_type:
 			ref = dav2val(dav, psz);
