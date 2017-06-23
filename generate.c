@@ -263,7 +263,14 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 		}
 		break;
 	case CTF_K_ENUM:
-		/* FIXME */
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
+			struct ctf_enum	cte;
+
+			cte.cte_name = imcs_add_string(imcs, im->im_name);
+			cte.cte_value = im->im_ref;
+
+			dbuf_copy(&imcs->body, &cte, sizeof(cte));
+		}
 		break;
 	case CTF_K_POINTER:
 	case CTF_K_TYPEDEF:

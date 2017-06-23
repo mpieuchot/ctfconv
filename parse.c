@@ -79,6 +79,7 @@ struct itype	*parse_funcptr(struct dwdie *, size_t);
 struct itype	*parse_variable(struct dwdie *, size_t);
 
 void		 subparse_subrange(struct dwdie *, size_t, struct itype *);
+void		 subparse_enumerator(struct dwdie *, size_t, struct itype *);
 void		 subparse_member(struct dwdie *, size_t, struct itype *, size_t);
 void		 subparse_arguments(struct dwdie *, size_t, struct itype *);
 
@@ -225,13 +226,12 @@ it_reference(struct itype *it)
 {
 	struct imember *im;
 
-	if (it->it_flags & ITF_USED)
+	if (it == NULL || it->it_flags & ITF_USED)
 		return;
 
 	it->it_flags |= ITF_USED;
 
-	if (it->it_refp != NULL)
-		it_reference(it->it_refp);
+	it_reference(it->it_refp);
 	TAILQ_FOREACH(im, &it->it_members, im_next)
 		it_reference(im->im_refp);
 }
@@ -788,6 +788,8 @@ parse_enum(struct dwdie *die, size_t psz)
 
 	it = it_new(++tidx, die->die_offset, name, size, 0, 0, CTF_K_ENUM, 0);
 
+	subparse_enumerator(die, psz, it);
+
 	return it;
 }
 
@@ -829,6 +831,61 @@ subparse_subrange(struct dwdie *die, size_t psz, struct itype *it)
 
 		assert(nelems < UINT_MAX);
 		it->it_nelems = nelems;
+	}
+}
+
+void
+subparse_enumerator(struct dwdie *die, size_t psz, struct itype *it)
+{
+	struct imember *im;
+	struct dwaval *dav;
+
+	assert(it->it_type == CTF_K_ENUM);
+
+	if (die->die_dab->dab_children == DW_CHILDREN_no)
+		return;
+
+	/*
+	 * This loop assumes that the children of a DIE are just
+	 * after it on the list.
+	 */
+	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
+		uint64_t tag = die->die_dab->dab_tag;
+		size_t n, val = 0;
+		const char *name = NULL;
+
+		if (tag != DW_TAG_enumerator)
+			break;
+
+		SIMPLEQ_FOREACH(dav, &die->die_avals, dav_next) {
+			switch (dav->dav_dat->dat_attr) {
+			case DW_AT_name:
+				name = dav2str(dav);
+				break;
+			case DW_AT_const_value:
+				val = dav2val(dav, psz);
+				break;
+			default:
+				DPRINTF("%s\n",
+				    dw_at2name(dav->dav_dat->dat_attr));
+				break;
+			}
+		}
+
+		if (name == NULL) {
+			warnx("%s with anon member", it_name(it));
+			continue;
+		}
+
+		im = xcalloc(1, sizeof(*im));
+		im->im_ref = val;
+		n = strlcpy(im->im_name, name, ITNAME_MAX);
+		if (n > ITNAME_MAX)
+			warnx("name %s too long %zd > %d", name, n, ITNAME_MAX);
+
+		assert(it->it_nelems < UINT_MAX);
+		it->it_nelems++;
+		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
 	}
 }
 
@@ -1151,6 +1208,7 @@ dav2val(struct dwaval *dav, size_t psz)
 	case DW_FORM_ref4:
 		val = dav->dav_u32;
 		break;
+	case DW_FORM_sdata:
 	case DW_FORM_data8:
 	case DW_FORM_ref8:
 		val = dav->dav_u64;
