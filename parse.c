@@ -358,11 +358,12 @@ im_new(const char *name, size_t ref, size_t off)
 {
 	struct imember *im;
 
-	im = pzalloc(&im_pool, sizeof(*im));
+	im = pmalloc(&im_pool, sizeof(*im));
 	im->im_ref = ref;
 	im->im_off = off;
+	im->im_refp = NULL;
 	if (name == NULL) {
-		im->im_flags |= ITM_ANON;
+		im->im_flags = ITM_ANON;
 	} else {
 		size_t n;
 
@@ -370,6 +371,7 @@ im_new(const char *name, size_t ref, size_t off)
 		if (n > ITNAME_MAX)
 			warnx("name %s too long %zd > %d", name, n,
 			    ITNAME_MAX);
+		im->im_flags = 0;
 	}
 
 	return im;
