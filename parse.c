@@ -106,6 +106,7 @@ int		 it_name_cmp(struct itype *, struct itype *);
 int		 it_off_cmp(struct itype *, struct itype *);
 void		 ir_add(struct itype *, struct itype *);
 void		 ir_purge(struct itype *);
+struct imember	*im_new(const char *, size_t, size_t);
 
 RB_GENERATE(itype_tree, itype, it_node, it_cmp);
 RB_GENERATE(isymb_tree, itype, it_node, it_name_cmp);
@@ -226,10 +227,7 @@ it_dup(struct itype *it)
 	copit->it_nelems = it->it_nelems;
 
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
-		copim = pzalloc(&im_pool, sizeof(*im));
-		strlcpy(copim->im_name, im->im_name, ITNAME_MAX);
-		copim->im_ref = im->im_ref;
-		copim->im_off = im->im_off;
+		copim = im_new(im->im_name, im->im_ref, im->im_off);
 		copim->im_refp = im->im_refp;
 		TAILQ_INSERT_TAIL(&copit->it_members, copim, im_next);
 	}
@@ -351,6 +349,28 @@ ir_purge(struct itype *it)
 		SIMPLEQ_REMOVE_HEAD(&it->it_refs, ir_next);
 		pfree(&ir_pool, ir);
 	}
+}
+
+struct imember *
+im_new(const char *name, size_t ref, size_t off)
+{
+	struct imember *im;
+
+	im = pzalloc(&im_pool, sizeof(*im));
+	im->im_ref = ref;
+	im->im_off = off;
+	if (name == NULL) {
+		im->im_flags |= ITM_ANON;
+	} else {
+		size_t n;
+
+		n = strlcpy(im->im_name, name, ITNAME_MAX);
+		if (n > ITNAME_MAX)
+			warnx("name %s too long %zd > %d", name, n,
+			    ITNAME_MAX);
+	}
+
+	return im;
 }
 
 void
@@ -883,7 +903,7 @@ subparse_enumerator(struct dwdie *die, size_t psz, struct itype *it)
 	 */
 	while ((die = SIMPLEQ_NEXT(die, die_next)) != NULL) {
 		uint64_t tag = die->die_dab->dab_tag;
-		size_t n, val = 0;
+		size_t val = 0;
 		const char *name = NULL;
 
 		if (tag != DW_TAG_enumerator)
@@ -909,12 +929,7 @@ subparse_enumerator(struct dwdie *die, size_t psz, struct itype *it)
 			continue;
 		}
 
-		im = xcalloc(1, sizeof(*im));
-		im->im_ref = val;
-		n = strlcpy(im->im_name, name, ITNAME_MAX);
-		if (n > ITNAME_MAX)
-			warnx("name %s too long %zd > %d", name, n, ITNAME_MAX);
-
+		im = im_new(name, val, 0);
 		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
@@ -991,7 +1006,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 				ref = dav2val(dav, psz);
 				break;
 			case DW_AT_data_member_location:
-				off = dav2val(dav, psz);
+				off = 8 * dav2val(dav, psz);
 				break;
 			case DW_AT_bit_size:
 				bits = dav2val(dav, psz);
@@ -1012,20 +1027,7 @@ subparse_member(struct dwdie *die, size_t psz, struct itype *it, size_t offset)
 		if ((ref == 0) && (tag == DW_TAG_structure_type))
 			ref = die->die_offset - offset;
 
-		im = pzalloc(&im_pool, sizeof(*im));
-		im->im_off = 8 * off;
-		im->im_ref = ref;
-		if (name == NULL) {
-			im->im_flags |= ITM_ANON;
-		} else {
-			size_t n;
-
-			n = strlcpy(im->im_name, name, ITNAME_MAX);
-			if (n > ITNAME_MAX)
-				warnx("name %s too long %zd > %d", name, n,
-				    ITNAME_MAX);
-		}
-
+		im = im_new(name, ref, off);
 		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
@@ -1085,8 +1087,7 @@ subparse_arguments(struct dwdie *die, size_t psz, struct itype *it)
 			}
 		}
 
-		im = pzalloc(&im_pool, sizeof(*im));
-		im->im_ref = ref;
+		im = im_new(NULL, ref, 0);
 		assert(it->it_nelems < UINT_MAX);
 		it->it_nelems++;
 		TAILQ_INSERT_TAIL(&it->it_members, im, im_next);
