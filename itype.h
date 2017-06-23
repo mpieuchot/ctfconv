@@ -18,7 +18,7 @@
 #ifndef _ITTYPE_H_
 #define _ITTYPE_H_
 
-#define ITNAME_MAX	64
+#define ITNAME_MAX	128
 
 struct imember;
 struct itref;
