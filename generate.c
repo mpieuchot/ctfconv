@@ -175,13 +175,13 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 	struct ctf_array	 cta;
 	unsigned int		 eob;
 	uint32_t		 size;
+	uint16_t		 arg;
 	size_t			 ctsz;
 	int			 kind, root, vlen;
 
 	assert(it->it_type != CTF_K_UNKNOWN && it->it_type != CTF_K_FORWARD);
 
-	/* Function pointers abuse it_nelems for # arguments. */
-	vlen = (it->it_type != CTF_K_FUNCTION) ? it->it_nelems : 0;
+	vlen = it->it_nelems;
 	size = it->it_size;
 	kind = it->it_type;
 	root = 0;
@@ -253,7 +253,14 @@ imcs_add_type(struct imcs *imcs, struct itype *it)
 		}
 		break;
 	case CTF_K_FUNCTION:
-		/* FIXME */
+		TAILQ_FOREACH(im, &it->it_members, im_next) {
+			arg = im->im_refp->it_idx;
+			dbuf_copy(&imcs->body, &arg, sizeof(arg));
+		}
+		if (vlen & 1) {
+			arg = 0;
+			dbuf_copy(&imcs->body, &arg, sizeof(arg));
+		}
 		break;
 	case CTF_K_ENUM:
 		/* FIXME */
