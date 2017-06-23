@@ -191,16 +191,18 @@ it_new(uint64_t index, size_t off, const char *name, uint32_t size,
 	}
 #endif
 
-	it = pzalloc(&it_pool, sizeof(*it));
-	TAILQ_INIT(&it->it_members);
+	it = pmalloc(&it_pool, sizeof(*it));
 	SIMPLEQ_INIT(&it->it_refs);
-	it->it_flags = flags;
+	TAILQ_INIT(&it->it_members);
 	it->it_off = off;
 	it->it_ref = ref;
-	it->it_idx = index;
-	it->it_enc = enc;
-	it->it_type = type;
+	it->it_refp = NULL;
 	it->it_size = size;
+	it->it_nelems = 0;
+	it->it_enc = enc;
+	it->it_idx = index;
+	it->it_type = type;
+	it->it_flags = flags;
 
 	if (name == NULL) {
 		it->it_flags |= ITF_ANON;
