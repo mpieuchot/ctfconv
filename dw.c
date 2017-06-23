@@ -547,11 +547,11 @@ dw_cu_parse(struct dwbuf *info, struct dwbuf *abbrev, size_t seglen,
 	static int 	 dw_pool_inited = 0;
 
 	if (!dw_pool_inited) {
-		pool_init(&dcu_pool, "dcu", sizeof(struct dwcu));
-		pool_init(&dab_pool, "dab", sizeof(struct dwabbrev));
-		pool_init(&dat_pool, "dat", sizeof(struct dwattr));
-		pool_init(&die_pool, "die", sizeof(struct dwdie));
-		pool_init(&dav_pool, "dav", sizeof(struct dwaval));
+		pool_init(&dcu_pool, "dcu", 1, sizeof(struct dwcu));
+		pool_init(&dab_pool, "dab", 32, sizeof(struct dwabbrev));
+		pool_init(&dat_pool, "dat", 32, sizeof(struct dwattr));
+		pool_init(&die_pool, "die", 512, sizeof(struct dwdie));
+		pool_init(&dav_pool, "dav", 1024, sizeof(struct dwaval));
 		dw_pool_inited = 1;
 	}
 #endif /* NOPOOL */

@@ -183,9 +183,9 @@ it_new(uint64_t index, size_t off, const char *name, uint32_t size,
 	static int it_pool_inited = 0;
 
 	if (!it_pool_inited) {
-		pool_init(&it_pool, "it", sizeof(struct itype));
-		pool_init(&im_pool, "im", sizeof(struct imember));
-		pool_init(&ir_pool, "ir", sizeof(struct itref));
+		pool_init(&it_pool, "it", 512, sizeof(struct itype));
+		pool_init(&im_pool, "im", 1024, sizeof(struct imember));
+		pool_init(&ir_pool, "ir", 1024, sizeof(struct itref));
 		it_pool_inited = 1;
 	}
 #endif

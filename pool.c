@@ -37,30 +37,18 @@ struct pool_item {
 SIMPLEQ_HEAD(, pool) pool_head = SIMPLEQ_HEAD_INITIALIZER(pool_head);
 
 void
-pool_init(struct pool *pp, const char *name, size_t size)
+pool_init(struct pool *pp, const char *name, size_t nmemb, size_t size)
 {
 	size = MAXIMUM(size, sizeof(struct pool_item));
 
 	SLIST_INIT(&pp->pr_free);
 	pp->pr_name = name;
+	pp->pr_nmemb = nmemb;
 	pp->pr_size = size;
 	pp->pr_nitems = 0;
 	pp->pr_nfree = 0;
 
 	SIMPLEQ_INSERT_TAIL(&pool_head, pp, pr_list);
-}
-
-void
-pool_purge(struct pool *pp)
-{
-	struct pool_item *pi;
-
-	assert(pp->pr_nitems == pp->pr_nfree);
-
-	while ((pi = SLIST_FIRST(&pp->pr_free)) != NULL) {
-		SLIST_REMOVE_HEAD(&pp->pr_free, pi_list);
-		free(pi);
-	}
 }
 
 void *
@@ -69,10 +57,17 @@ pool_get(struct pool *pp)
 	struct pool_item *pi;
 
 	if (SLIST_EMPTY(&pp->pr_free)) {
-		pi = xmalloc(pp->pr_size);
-		SLIST_INSERT_HEAD(&pp->pr_free, pi, pi_list);
-		pp->pr_nitems += 1;
-		pp->pr_nfree += 1;
+		char *p;
+		size_t i;
+
+		p = xreallocarray(NULL, pp->pr_nmemb, pp->pr_size);
+		for (i = 0; i < pp->pr_nmemb; i++) {
+			pi = (struct pool_item *)p;
+			SLIST_INSERT_HEAD(&pp->pr_free, pi, pi_list);
+			p += pp->pr_size;
+		}
+		pp->pr_nitems += pp->pr_nmemb;
+		pp->pr_nfree += pp->pr_nmemb;
 	}
 
 	pi = SLIST_FIRST(&pp->pr_free);

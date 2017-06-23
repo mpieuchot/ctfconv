@@ -23,13 +23,13 @@ struct pool {
 	SIMPLEQ_ENTRY(pool)	 pr_list;	/* list of all pools */
 	const char		*pr_name;	/* identifier */
 	SLIST_HEAD(, pool_item)  pr_free;	/* free list */
+	size_t			 pr_nmemb;	/* # of items per allocation */
 	size_t			 pr_size;	/* size of an item */
 	size_t			 pr_nitems;	/* # of available items */
 	size_t			 pr_nfree;	/* # items on the free list */
 };
 
-void	 pool_init(struct pool *, const char *, size_t);
-void 	 pool_purge(struct pool *);
+void	 pool_init(struct pool *, const char *, size_t, size_t);
 void	*pool_get(struct pool *);
 void	 pool_put(struct pool *, void *);
 void	 pool_dump(void);
