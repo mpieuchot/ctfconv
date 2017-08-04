@@ -414,7 +414,7 @@ dump_func(struct itype *it, int *idx)
 		return;
 
 	printf("  [%u] FUNC (%s) returns: %u args: (", (*idx),
-	    (it->it_name != NULL) ? it->it_name : "unknown",
+	    (it_name(it) != NULL) ? it_name(it) : "unknown",
 	    it->it_refp->it_idx);
 	TAILQ_FOREACH(im, &it->it_members, im_next) {
 		printf("%u%s", im->im_refp->it_idx,
