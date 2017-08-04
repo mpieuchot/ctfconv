@@ -779,7 +779,8 @@ parse_refers(struct dwdie *die, size_t psz, int type)
 	    ITF_UNRES);
 
 	if (it->it_ref == 0 && (it->it_size == sizeof(void *) ||
-	    type == CTF_K_CONST || type == CTF_K_VOLATILE || CTF_K_POINTER)) {
+	    type == CTF_K_CONST || type == CTF_K_VOLATILE ||
+	    type == CTF_K_POINTER)) {
 		/* Work around GCC/clang not emiting a type for void */
 		it->it_flags &= ~ITF_UNRES;
 		it->it_ref = VOID_OFFSET;
