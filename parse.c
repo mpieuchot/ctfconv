@@ -191,6 +191,8 @@ it_new(uint64_t index, size_t off, const char *name, uint32_t size,
 	}
 #endif
 
+	assert((name != NULL) || !(flags & (ITF_FUNC|ITF_OBJ)));
+
 	it = pmalloc(&it_pool, sizeof(*it));
 	SIMPLEQ_INIT(&it->it_refs);
 	TAILQ_INIT(&it->it_members);
@@ -1126,6 +1128,13 @@ parse_function(struct dwdie *die, size_t psz)
 			break;
 		}
 	}
+
+	/*
+	 * Work around for clang 4.0 generating DW_TAG_subprogram without
+	 * any attribute.
+	 */
+	if (name == NULL)
+		return NULL;
 
 	it = it_new(++fidx, die->die_offset, name, 0, 0, ref, CTF_K_FUNCTION,
 	    ITF_UNRES|ITF_FUNC);
